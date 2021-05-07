@@ -201,14 +201,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     #all_files = os.listdir("lyrics/")   # imagine you're one directory above test dir
-    all_files = ["radiohead.txt","disney.txt"]
+    all_files = ["radiohead.txt","disney.txt", "adele.txt"]
     n_vers = 8
     data = []
     authors = []
     for file in all_files:
         author = file.split(".")[0]
         authors.append(author)
-        with open('..\\LyricsGeneration\\lyrics\\'+file, 'r',encoding="utf-8") as fp:
+        with open('..\\..\\datasets\\lyrics\\'+file, 'r',encoding="utf-8") as fp:
             line = fp.readline()
             sentence = []   
             sentence.append(line.replace("\n"," newLine"))
@@ -236,12 +236,13 @@ if __name__ == "__main__":
 
     # ### Training Word2Vec and USE
 
-    print("USE encoding")
-    import tensorflow_hub as hub
-    module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
-    USE = hub.load(module_url)
-    print ("module %s loaded" % module_url)
-    D = np.asarray(USE(df["Raw"]),dtype=np.float32)
+    # print("USE encoding")
+    # import tensorflow_hub as hub
+    # module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
+    # USE = hub.load(module_url)
+    # print ("module %s loaded" % module_url)
+    # D = np.asarray(USE(df["Raw"]),dtype=np.float32)
+    D=np.load("use_lyrics_512_3.npy")
 
     from gensim.models import Word2Vec
     import numpy as np
