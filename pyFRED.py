@@ -68,7 +68,7 @@ class pyfred(nn.Module):
         
         a_embds = self.A(a.long()).squeeze(1)
 
-        return w_embds - a_embds
+        return (w_embds - a_embds).float()
 
 
     def forward(self, a, src, trg, hidden, teacher_forcing_ratio = 0.5):
@@ -114,7 +114,7 @@ def train(model, train_data, optimizer, criterion, regularization, alba = False)
         loss = criterion(output, y)
 
         if alba:
-            loss += alba*regularization(model.regularization(a, x, x_topic),torch.zeros(a.shape[0], model.r, dtype=torch.double)) 
+            loss += alba*regularization(model.regularization(a, x, x_topic),torch.zeros(a.shape[0], model.r)) 
 
         train_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
 
@@ -149,7 +149,7 @@ def evaluate(model, test_data, criterion, regularization, alba=False):
             loss = criterion(output, y)
 
             if alba:
-                test_norm += regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r, dtype=torch.double))
+                test_norm += regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
 
             test_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
 
@@ -279,7 +279,7 @@ for epoch in range(1, epochs+1):
                     'model_state_dict':model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict()}, f'training_checkpoints\\pyfred_{epoch}.pt')
 
-    with open("loss_results_uni.txt", "a") as ff:
+    with open("results\\loss_results_uni.txt", "a") as ff:
         ff.write('%06f | %06f | %06f | %06f | %06f\n' % (train_loss, test_loss, train_accuracy*100, test_accuracy*100, test_L2loss))
 
 print(' -- Trained in ' + str(datetime.datetime.now()-start) + ' -- ')

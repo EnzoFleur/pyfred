@@ -80,7 +80,7 @@ class pyfred(nn.Module):
         
         a_embds = self.A(a.long()).squeeze(1)
 
-        return w_embds - a_embds
+        return (w_embds - a_embds).float()
 
 
     def forward(self, a, src, trg, hidden, teacher_forcing_ratio = 0.5):
@@ -135,7 +135,7 @@ def train_gpus(model, train_loader, optimizer, criterion, regularization, alba =
         loss = criterion(output, y)
 
         if alba:
-            loss += regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r, dtype=torch.double))
+            loss += regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
 
         train_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
 
@@ -179,7 +179,7 @@ def evaluate_gpus(model, test_data, criterion, regularization, alba=False):
             loss = criterion(output, y)
 
             if alba:
-                test_norm += regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r, dtype=torch.double))
+                test_norm += regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
 
             test_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
 
@@ -266,7 +266,9 @@ ang_tok,ang_tok_shift,ang_pl = pad([[word_map[w] for w in text] for text in raw_
 authors_id = np.asarray([aut2id[i] for i in list(df['Author'])])
 authors_id = np.expand_dims(authors_id, 1)
 
-batch_size = 32
+batch_size_per_gpu = 32
+
+batch_size = batch_size_per_gpu * idr_torch.size
 
 X = np.hstack([authors_id,D,ang_tok])
 Y = np.hstack([ang_tok_shift])
@@ -293,8 +295,6 @@ if alba:
     regularization = nn.MSELoss()
 
 optimizer = optim.Adam(ddp_model.parameters(), lr=0.001)
-
-batch_size_per_gpu = batch_size // idr_torch.size
 
 train_sampler = torch.utils.data.distributed.DistributedSampler(train_data, 
                                                                 num_replicas=idr_torch.size,
@@ -337,7 +337,7 @@ for epoch in range(1, epochs+1):
                         'model_state_dict':model.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict()}, f'training_checkpoints\\pyfred_{epoch}.pt')
 
-        with open("loss_results_uni.txt", "a") as ff:
+        with open("results\\loss_results_uni.txt", "a") as ff:
             ff.write('%06f | %06f | %06f | %06f | %06f\n' % (train_loss, test_loss, train_accuracy*100, test_accuracy*100, test_L2loss))
 
 print(' -- Trained in ' + str(datetime.datetime.now()-start) + ' -- ')
