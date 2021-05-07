@@ -18,17 +18,6 @@ import idr_torch
 
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
- 
-dist.init_process_group(backend='nccl', 
-                        init_method='env://', 
-                        world_size=idr_torch.size, 
-                        rank=idr_torch.rank)
-
-torch.cuda.set_device(idr_torch.local_rank)
-gpu = torch.device("cuda")
-
-nlp = English()
-tokenizer = nlp.Defaults.create_tokenizer(nlp)
 
 class pyfred(nn.Module):
 
@@ -194,6 +183,17 @@ if __name__ == "__main__":
     # get distributed configuration from Slurm environment
     NODE_ID = os.environ['SLURM_NODEID']
     MASTER_ADDR = os.environ['MASTER_ADDR']
+
+    dist.init_process_group(backend='nccl', 
+                        init_method='env://', 
+                        world_size=idr_torch.size, 
+                        rank=idr_torch.rank)
+
+    torch.cuda.set_device(idr_torch.local_rank)
+    gpu = torch.device("cuda")
+
+    nlp = English()
+    tokenizer = nlp.Defaults.create_tokenizer(nlp)
 
     # display info
     if idr_torch.rank == 0:
