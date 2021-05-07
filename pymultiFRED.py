@@ -191,6 +191,16 @@ def evaluate_gpus(model, test_data, criterion, regularization, alba=False):
 
 if __name__ == "__main__":
 
+    # get distributed configuration from Slurm environment
+    NODE_ID = os.environ['SLURM_NODEID']
+    MASTER_ADDR = os.environ['MASTER_ADDR']
+
+    # display info
+    if idr_torch.rank == 0:
+        print(">>> Training on ", len(idr_torch.hostnames), " nodes and ", idr_torch.size, " processes, master node is ", MASTER_ADDR)
+    print("- Process {} corresponds to GPU {} of node {}".format(idr_torch.rank, idr_torch.local_rank, NODE_ID))
+
+
     parser = argparse.ArgumentParser()
     parser.add_argument('-b', '--batch-size', default=32, type =int,
                         help='batch size. it will be divided in mini-batch for each worker')
