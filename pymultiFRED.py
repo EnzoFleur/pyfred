@@ -7,6 +7,7 @@ import numpy as np
 import random
 from datetime import datetime
 from time import time
+import argparse
 
 import torch
 from torch import nn
@@ -188,163 +189,176 @@ def evaluate_gpus(model, test_data, criterion, regularization, alba=False):
     return test_loss/len(test_data), test_accuracy/len(test_data), alba*test_norm/len(test_data)
 
 
-#all_files = os.listdir("lyrics/")   # imagine you're one directory above test dir
-all_files = ["radiohead.txt","disney.txt"]
-n_vers = 8
-data = []
-authors = []
-for file in all_files:
-    author = file.split(".")[0]
-    authors.append(author)
-    with open('..\\LyricsGeneration\\lyrics\\'+file, 'r',encoding="utf-8") as fp:
-        line = fp.readline()
-        sentence = []   
-        sentence.append(line.replace("\n"," newLine"))
-        while line:
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-b', '--batch-size', default=32, type =int,
+                        help='batch size. it will be divided in mini-batch for each worker')
+    parser.add_argument('-e','--epochs', default=10, type=int, metavar='N',
+                        help='number of total epochs to run')
+    parser.add_argument('-n','--name', default=None, type=str,
+                        help='unique run id')
+    args = parser.parse_args()
+
+    #all_files = os.listdir("lyrics/")   # imagine you're one directory above test dir
+    all_files = ["radiohead.txt","disney.txt"]
+    n_vers = 8
+    data = []
+    authors = []
+    for file in all_files:
+        author = file.split(".")[0]
+        authors.append(author)
+        with open('..\\LyricsGeneration\\lyrics\\'+file, 'r',encoding="utf-8") as fp:
             line = fp.readline()
+            sentence = []   
             sentence.append(line.replace("\n"," newLine"))
-            if len(sentence) == n_vers:
+            while line:
+                line = fp.readline()
+                sentence.append(line.replace("\n"," newLine"))
+                if len(sentence) == n_vers:
+                    sent = " ".join(sentence)
+                    tok = ['<S>'] + [token.string.strip() for token in tokenizer(sent.lower()) if token.string.strip() != ''] + ['</S>']
+                    data.append((author,sent,tok))
+                    sentence = []  
+            if len(sentence) != 0:
                 sent = " ".join(sentence)
                 tok = ['<S>'] + [token.string.strip() for token in tokenizer(sent.lower()) if token.string.strip() != ''] + ['</S>']
                 data.append((author,sent,tok))
-                sentence = []  
-        if len(sentence) != 0:
-            sent = " ".join(sentence)
-            tok = ['<S>'] + [token.string.strip() for token in tokenizer(sent.lower()) if token.string.strip() != ''] + ['</S>']
-            data.append((author,sent,tok))
-            
-df = pd.DataFrame(data, columns =['Author', 'Raw', 'Tokens']) 
-aut2id = dict(zip(authors,range(len(authors))))
-df.head()
-   
-from nltk.probability import FreqDist
-raw_data = list(df['Tokens'])
-flat_list = [item for sublist in raw_data for item in sublist]
-freq = FreqDist(flat_list)
-
-# ### Training Word2Vec and USE
-
-print("USE encoding")
-import tensorflow_hub as hub
-module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
-USE = hub.load(module_url)
-print ("module %s loaded" % module_url)
-D = np.asarray(USE(df["Raw"]),dtype=np.float32)
-
-from gensim.models import Word2Vec
-import numpy as np
-
-EMBEDDING_SIZE = 120
-w2v = Word2Vec(list(df['Tokens']), size=EMBEDDING_SIZE, window=10, min_count=1, negative=10, workers=10)
-word_map = {}
-word_map["<PAD>"] = 0
-word_vectors = [np.zeros((EMBEDDING_SIZE,))]
-for i, w in enumerate([w for w in w2v.wv.vocab]):
-    word_map[w] = i+1
-    word_vectors.append(w2v.wv[w])
-word_vectors = np.vstack(word_vectors)
-i2w = dict(zip([*word_map.values()],[*word_map]))
-nw = word_vectors.shape[0]
-na = len(aut2id)
-print("%d auteurs et %d mots" % (na,nw))
-
-def pad(a,shift = False):
-    shape = len(a)
-    max_s = max([len(x) for x in a])
-    token = np.zeros((shape,max_s+1),dtype = np.int)
-    mask  =  np.zeros((shape,max_s+1),dtype = np.int)
-    for i,o in enumerate(a):
-        token[i,:len(o)] = o
-        mask[i,:len(o)] = 1
-    if shift:
-        return token[:,:-1],token[:,1:],max_s
-    else:
-        return token[:,:-1],max_s
-        
-ang_tok,ang_tok_shift,ang_pl = pad([[word_map[w] for w in text] for text in raw_data],shift = True)
-
-authors_id = np.asarray([aut2id[i] for i in list(df['Author'])])
-authors_id = np.expand_dims(authors_id, 1)
-
-batch_size_per_gpu = 32
-
-batch_size = batch_size_per_gpu * idr_torch.size
-
-X = np.hstack([authors_id,D,ang_tok])
-Y = np.hstack([ang_tok_shift])
-
-X = X.astype(np.float32)
-
-from sklearn.model_selection import train_test_split
-from torch.utils.data import TensorDataset, DataLoader
-
-X_train, X_test, Y_train, Y_test = train_test_split(X, Y, train_size=0.80, random_state=101)
-
-train_data = DataLoader(TensorDataset(torch.tensor(X_train), torch.tensor(Y_train)), batch_size=batch_size)
-test_data = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(Y_test)), batch_size=batch_size)
-
-model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=False)
-
-model = model.to(gpu)
-ddp_model = DDP(model, device_ids=[idr_torch.local_rank])
-
-criterion = nn.NLLLoss(ignore_index = 0)
-
-alba = 0.1
-if alba:
-    regularization = nn.MSELoss()
-
-optimizer = optim.Adam(ddp_model.parameters(), lr=0.001)
-
-train_sampler = torch.utils.data.distributed.DistributedSampler(train_data, 
-                                                                num_replicas=idr_torch.size,
-                                                                rank=idr_torch.rank)
-
-train_loader = torch.utils.data.DataLoader(dataset=train_data,
-                                            batch_size = batch_size_per_gpu,
-                                            shuffle=False,
-                                            num_workers=0,
-                                            pin_memory=True,
-                                            sampler=train_sampler)
-
-test_sampler = torch.utils.data.distributed.DistributedSampler(test_data, 
-                                                                num_replicas=idr_torch.size,
-                                                                rank=idr_torch.rank)
-
-test_loader = torch.utils.data.DataLoader(dataset=test_data,
-                                            batch_size = batch_size_per_gpu,
-                                            shuffle=True,
-                                            num_workers=0,
-                                            pin_memory=True,
-                                            sampler=test_sampler)
-
-epochs=40
-
-best_valid_loss = float('inf')
-
-if idr_torch.rank == 0: start = datetime.now()
-for epoch in range(1, epochs+1):
-
-    if idr_torch.rank == 0: print(f'Epoch [{epoch}/{epochs} :')
-
-    train_loss, train_accuracy = train_gpus(model, train_loader, optimizer, criterion, regularization, alba)
-    test_loss, test_accuracy, test_L2loss = evaluate_gpus(model, test_loader, criterion, regularization, alba)
-
-    if idr_torch.rank ==0:
-        if test_loss < best_valid_loss:
-            best_valid_loss = test_loss
-            torch.save({'epoch':epoch,
-                        'model_state_dict':model.state_dict(),
-                        'optimizer_state_dict': optimizer.state_dict()}, f'training_checkpoints\\pyfred_{epoch}.pt')
-
-        with open("results\\loss_results_uni.txt", "a") as ff:
-            ff.write('%06f | %06f | %06f | %06f | %06f\n' % (train_loss, test_loss, train_accuracy*100, test_accuracy*100, test_L2loss))
-
-print(' -- Trained in ' + str(datetime.datetime.now()-start) + ' -- ')
-A = []
-with torch.no_grad():
-    for i in range(model.na):
-        A.append(model.A(torch.tensor(i)).numpy())
-    A = np.vstack(A)
+                
+    df = pd.DataFrame(data, columns =['Author', 'Raw', 'Tokens']) 
+    aut2id = dict(zip(authors,range(len(authors))))
+    df.head()
     
-np.save("results\\author_embeddings_torch.npy", A)
+    from nltk.probability import FreqDist
+    raw_data = list(df['Tokens'])
+    flat_list = [item for sublist in raw_data for item in sublist]
+    freq = FreqDist(flat_list)
+
+    # ### Training Word2Vec and USE
+
+    print("USE encoding")
+    import tensorflow_hub as hub
+    module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
+    USE = hub.load(module_url)
+    print ("module %s loaded" % module_url)
+    D = np.asarray(USE(df["Raw"]),dtype=np.float32)
+
+    from gensim.models import Word2Vec
+    import numpy as np
+
+    EMBEDDING_SIZE = 120
+    w2v = Word2Vec(list(df['Tokens']), size=EMBEDDING_SIZE, window=10, min_count=1, negative=10, workers=10)
+    word_map = {}
+    word_map["<PAD>"] = 0
+    word_vectors = [np.zeros((EMBEDDING_SIZE,))]
+    for i, w in enumerate([w for w in w2v.wv.vocab]):
+        word_map[w] = i+1
+        word_vectors.append(w2v.wv[w])
+    word_vectors = np.vstack(word_vectors)
+    i2w = dict(zip([*word_map.values()],[*word_map]))
+    nw = word_vectors.shape[0]
+    na = len(aut2id)
+    print("%d auteurs et %d mots" % (na,nw))
+
+    def pad(a,shift = False):
+        shape = len(a)
+        max_s = max([len(x) for x in a])
+        token = np.zeros((shape,max_s+1),dtype = np.int)
+        mask  =  np.zeros((shape,max_s+1),dtype = np.int)
+        for i,o in enumerate(a):
+            token[i,:len(o)] = o
+            mask[i,:len(o)] = 1
+        if shift:
+            return token[:,:-1],token[:,1:],max_s
+        else:
+            return token[:,:-1],max_s
+            
+    ang_tok,ang_tok_shift,ang_pl = pad([[word_map[w] for w in text] for text in raw_data],shift = True)
+
+    authors_id = np.asarray([aut2id[i] for i in list(df['Author'])])
+    authors_id = np.expand_dims(authors_id, 1)
+
+
+    batch_size_per_gpu = args.batch_size
+    epochs=args.epochs
+    name=args.name
+
+    batch_size = batch_size_per_gpu * idr_torch.size
+
+    X = np.hstack([authors_id,D,ang_tok])
+    Y = np.hstack([ang_tok_shift])
+
+    X = X.astype(np.float32)
+
+    from sklearn.model_selection import train_test_split
+    from torch.utils.data import TensorDataset, DataLoader
+
+    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, train_size=0.80, random_state=101)
+
+    train_data = DataLoader(TensorDataset(torch.tensor(X_train), torch.tensor(Y_train)), batch_size=batch_size)
+    test_data = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(Y_test)), batch_size=batch_size)
+
+    model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=False)
+
+    model = model.to(gpu)
+    ddp_model = DDP(model, device_ids=[idr_torch.local_rank])
+
+    criterion = nn.NLLLoss(ignore_index = 0)
+
+    alba = 0.1
+    if alba:
+        regularization = nn.MSELoss()
+
+    optimizer = optim.Adam(ddp_model.parameters(), lr=0.001)
+
+    train_sampler = torch.utils.data.distributed.DistributedSampler(train_data, 
+                                                                    num_replicas=idr_torch.size,
+                                                                    rank=idr_torch.rank)
+
+    train_loader = torch.utils.data.DataLoader(dataset=train_data,
+                                                batch_size = batch_size_per_gpu,
+                                                shuffle=False,
+                                                num_workers=0,
+                                                pin_memory=True,
+                                                sampler=train_sampler)
+
+    test_sampler = torch.utils.data.distributed.DistributedSampler(test_data, 
+                                                                    num_replicas=idr_torch.size,
+                                                                    rank=idr_torch.rank)
+
+    test_loader = torch.utils.data.DataLoader(dataset=test_data,
+                                                batch_size = batch_size_per_gpu,
+                                                shuffle=True,
+                                                num_workers=0,
+                                                pin_memory=True,
+                                                sampler=test_sampler)
+
+    best_valid_loss = float('inf')
+
+    if idr_torch.rank == 0: start = datetime.now()
+    for epoch in range(1, epochs+1):
+
+        if idr_torch.rank == 0: print(f'Epoch [{epoch}/{epochs} :')
+
+        train_loss, train_accuracy = train_gpus(model, train_loader, optimizer, criterion, regularization, alba)
+        test_loss, test_accuracy, test_L2loss = evaluate_gpus(model, test_loader, criterion, regularization, alba)
+
+        if idr_torch.rank ==0:
+            if test_loss < best_valid_loss:
+                best_valid_loss = test_loss
+                torch.save({'epoch':epoch,
+                            'model_state_dict':model.state_dict(),
+                            'optimizer_state_dict': optimizer.state_dict()},  f'training_checkpoints\\pyfred_{name}_{epoch}.pt')
+
+            with open(f"results\\loss_pyfred_{name}.txt", "a") as ff:
+                ff.write('%06f | %06f | %06f | %06f | %06f\n' % (train_loss, test_loss, train_accuracy*100, test_accuracy*100, test_L2loss))
+
+    if idr_torch.rank == 0:
+        print(' -- Trained in ' + str(datetime.datetime.now()-start) + ' -- ')
+        A = []
+        with torch.no_grad():
+            for i in range(model.na):
+                A.append(model.A(torch.tensor(i)).numpy())
+            A = np.vstack(A)
+            
+        np.save(f"results\\author_embeddings_{name}.npy", A)
