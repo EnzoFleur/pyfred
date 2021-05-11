@@ -193,7 +193,7 @@ if __name__ == "__main__":
     gpu = torch.device("cuda")
 
     nlp = English()
-    tokenizer = nlp.Defaults.create_tokenizer(nlp)
+    tokenizer = nlp.tokenizer
 
     # display info
     if idr_torch.rank == 0:
@@ -227,12 +227,12 @@ if __name__ == "__main__":
                 sentence.append(line.replace("\n"," newLine"))
                 if len(sentence) == n_vers:
                     sent = " ".join(sentence)
-                    tok = ['<S>'] + [token.string.strip() for token in tokenizer(sent.lower()) if token.string.strip() != ''] + ['</S>']
+                    tok = ['<S>'] + [token.text.strip() for token in tokenizer(sent.lower()) if token.text.strip() != ''] + ['</S>']
                     data.append((author,sent,tok))
                     sentence = []  
             if len(sentence) != 0:
                 sent = " ".join(sentence)
-                tok = ['<S>'] + [token.string.strip() for token in tokenizer(sent.lower()) if token.string.strip() != ''] + ['</S>']
+                tok = ['<S>'] + [token.text.strip() for token in tokenizer(sent.lower()) if token.text.strip() != ''] + ['</S>']
                 data.append((author,sent,tok))
                 
     df = pd.DataFrame(data, columns =['Author', 'Raw', 'Tokens']) 
