@@ -311,7 +311,7 @@ if __name__ == "__main__":
     if idr_torch.rank==0: print("Dataset is ready to be loaded !")
 
     if idr_torch.rank==0: print("Stuck on A")
-    model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=False).cuda(gpu)
+    model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=False).to(gpu)
 
     if idr_torch.rank==0: print("Stuck on B")
     ddp_model = DDP(model, device_ids=[idr_torch.local_rank])
@@ -344,7 +344,7 @@ if __name__ == "__main__":
 
     test_loader = torch.utils.data.DataLoader(dataset=test_data,
                                                 batch_size = batch_size_per_gpu,
-                                                shuffle=True,
+                                                shuffle=False,
                                                 num_workers=0,
                                                 pin_memory=True,
                                                 sampler=test_sampler)
