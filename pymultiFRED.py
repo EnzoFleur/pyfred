@@ -289,7 +289,6 @@ if __name__ == "__main__":
     authors_id = np.asarray([aut2id[i] for i in list(df['Author'])])
     authors_id = np.expand_dims(authors_id, 1)
 
-
     batch_size_per_gpu = args.batch_size
     epochs=args.epochs
     name=args.name
@@ -309,12 +308,16 @@ if __name__ == "__main__":
     train_data = DataLoader(TensorDataset(torch.tensor(X_train), torch.tensor(Y_train)), batch_size=batch_size)
     test_data = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(Y_test)), batch_size=batch_size)
 
+    if idr_torch.rank==0: print("Dataset is ready to be loaded !")
+
     model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=False)
 
     model = model.to(gpu)
     ddp_model = DDP(model, device_ids=[idr_torch.local_rank])
 
     criterion = nn.NLLLoss(ignore_index = 0)
+
+    if idr_torch.rank==0: print("Model is ready for training !")
 
     alba = 0.1
     if alba:
@@ -346,6 +349,7 @@ if __name__ == "__main__":
 
     best_valid_loss = float('inf')
 
+    if idr_torch.rank==0: print(f"Training is beginning for {epochs} epochs !")
     if idr_torch.rank == 0: start = datetime.now()
     for epoch in range(1, epochs+1):
 
