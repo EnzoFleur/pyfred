@@ -211,7 +211,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     #all_files = os.listdir("lyrics/")   # imagine you're one directory above test dir
-    all_files = ["radiohead.txt","disney.txt", "adele.txt"]
+    all_files = ["radiohead.txt","disney.txt"]
     n_vers = 8
     data = []
     authors = []
