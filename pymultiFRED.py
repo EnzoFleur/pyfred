@@ -137,7 +137,7 @@ def train_gpus(model, train_data, optimizer, criterion, regularization, alba = F
         train_loss += loss.item()
 
         if idr_torch.rank==0: stop_training = time()
-        if ((i + 1) % len(train_loader)//2 == 0) and (idr_torch.rank == 0):
+        if ((i + 1) % total_step//2 == 0) and (idr_torch.rank == 0):
             print('\tStep [{}/{}], Loss: {:.4f}, Accuracy: {:.4f}, Time data load: {:.3f}ms, Time training: {:.3f}ms'.format(
                                                                     i + 1, total_step, train_loss/len(train_data), train_accuracy/len(train_data),
                                                                     (stop_dataload - start_dataload)*1000, (stop_training - start_training)*1000))
@@ -305,8 +305,8 @@ if __name__ == "__main__":
 
     X_train, X_test, Y_train, Y_test = train_test_split(X, Y, train_size=0.80, random_state=101)
 
-    train_data = DataLoader(TensorDataset(torch.tensor(X_train), torch.tensor(Y_train)), batch_size=batch_size)
-    test_data = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(Y_test)), batch_size=batch_size)
+    train_data = TensorDataset(torch.tensor(X_train), torch.tensor(Y_train))
+    test_data = TensorDataset(torch.tensor(X_test), torch.tensor(Y_test))
 
     if idr_torch.rank==0: print("Dataset is ready to be loaded !")
 
