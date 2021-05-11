@@ -96,15 +96,15 @@ class pyfred(nn.Module):
 
         return outputs
 
-def train_gpus(model, train_loader, optimizer, criterion, regularization, alba = False):
+def train_gpus(model, train_data, optimizer, criterion, regularization, alba = False):
 
     model.train()
 
     train_loss = 0
     train_accuracy = 0
-    total_step = len(train_loader)
+    total_step = len(train_data)
     
-    for batch, (x, y) in enumerate(train_loader):
+    for i, (x, y) in enumerate(train_data):
         if idr_torch.rank==0: start_dataload = time()
 
         x = x.to(gpu, non_blocking=True)
