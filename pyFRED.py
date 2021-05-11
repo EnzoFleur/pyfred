@@ -16,7 +16,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 nlp = English()
-tokenizer = nlp.Defaults.create_tokenizer(nlp)
+tokenizer = nlp.tokenizer
 
 class pyfred(nn.Module):
 
@@ -121,7 +121,7 @@ def train(model, train_data, optimizer, criterion, regularization, alba = False)
 
         optimizer.zero_grad()
         loss.backward()
-        # torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
         optimizer.step()
 
         train_loss += loss.item()
