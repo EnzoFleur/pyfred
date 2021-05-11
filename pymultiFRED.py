@@ -218,7 +218,7 @@ if __name__ == "__main__":
     for file in all_files:
         author = file.split(".")[0]
         authors.append(author)
-        with open('..\\..\\datasets\\lyrics\\'+file, 'r',encoding="utf-8") as fp:
+        with open('../../datasets/lyrics/'+file, 'r',encoding="utf-8") as fp:
             line = fp.readline()
             sentence = []   
             sentence.append(line.replace("\n"," newLine"))
@@ -359,9 +359,9 @@ if __name__ == "__main__":
                 best_valid_loss = test_loss
                 torch.save({'epoch':epoch,
                             'model_state_dict':model.state_dict(),
-                            'optimizer_state_dict': optimizer.state_dict()},  f'training_checkpoints\\pyfred_{name}_{epoch}.pt')
+                            'optimizer_state_dict': optimizer.state_dict()},  f'training_checkpoints/pyfred_{name}_{epoch}.pt')
 
-            with open(f"results\\loss_pyfred_{name}.txt", "a") as ff:
+            with open(f"results/loss_pyfred_{name}.txt", "a") as ff:
                 ff.write('%06f | %06f | %06f | %06f | %06f\n' % (train_loss, test_loss, train_accuracy*100, test_accuracy*100, test_L2loss))
 
     if idr_torch.rank == 0:
@@ -372,4 +372,4 @@ if __name__ == "__main__":
                 A.append(model.A(torch.tensor(i)).numpy())
             A = np.vstack(A)
             
-        np.save(f"results\\author_embeddings_{name}.npy", A)
+        np.save(f"results/author_embeddings_{name}.npy", A)
