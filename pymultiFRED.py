@@ -310,9 +310,8 @@ if __name__ == "__main__":
 
     if idr_torch.rank==0: print("Dataset is ready to be loaded !")
 
-    model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=False)
+    model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=False).to(gpu)
 
-    model = model.to(gpu)
     ddp_model = DDP(model, device_ids=[idr_torch.local_rank])
 
     criterion = nn.NLLLoss(ignore_index = 0)
