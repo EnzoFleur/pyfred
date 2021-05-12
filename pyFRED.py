@@ -233,8 +233,8 @@ if __name__ == "__main__":
     def pad(a,shift = False):
         shape = len(a)
         max_s = max([len(x) for x in a])
-        token = np.zeros((shape,max_s+1),dtype = np.int)
-        mask  =  np.zeros((shape,max_s+1),dtype = np.int)
+        token = np.zeros((shape,max_s+1),dtype = int)
+        mask  =  np.zeros((shape,max_s+1),dtype = int)
         for i,o in enumerate(a):
             token[i,:len(o)] = o
             mask[i,:len(o)] = 1
