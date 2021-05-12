@@ -78,10 +78,10 @@ class pyfred(nn.Module):
         batch_size = a.shape[0]
         trg_len = trg.shape[1]
         
-        outputs = torch.zeros(batch_size, trg_len, self.nw, device=self.d.device)
+        outputs = torch.zeros(batch_size, trg_len, self.nw).cuda()
 
         input = src[:,0]
-
+        
         for t in range(0, trg_len):
 
             output, hidden = self.single_step(a, input, hidden.contiguous())
