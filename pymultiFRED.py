@@ -78,7 +78,7 @@ class pyfred(nn.Module):
         batch_size = a.shape[0]
         trg_len = trg.shape[1]
         
-        outputs = torch.zeros(batch_size, trg_len, self.nw)
+        outputs = torch.zeros(batch_size, trg_len, self.nw, device=self.d.device)
 
         input = src[:,0]
 
@@ -169,13 +169,13 @@ def evaluate_gpus(model, test_data, criterion, regularization, alba=None):
             loss = criterion(output, y)
 
             if model.L2loss:
-                test_norm += regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
+                test_norm += alba*regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
 
             test_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
 
-            test_loss += loss.item()
+            test_loss += loss.item() + test_norm.item()
 
-    return test_loss/len(test_data), test_accuracy/len(test_data), alba*test_norm/len(test_data)
+    return test_loss/len(test_data), test_accuracy/len(test_data), test_norm/len(test_data)
 
 
 if __name__ == "__main__":
@@ -359,82 +359,82 @@ if __name__ == "__main__":
 
         if idr_torch.rank == 0: print(f'Epoch [{epoch}/{epochs} :')
 
-        model.train()
+        # model.train()
 
-        train_loss = 0
-        train_accuracy = 0
-        total_step = len(train_data)
+        # train_loss = 0
+        # train_accuracy = 0
+        # total_step = len(train_data)
         
-        for i, (x, y) in enumerate(train_data):
-            if idr_torch.rank==0: start_dataload = time()
+        # for i, (x, y) in enumerate(train_data):
+        #     if idr_torch.rank==0: start_dataload = time()
 
-            x = x.to(gpu, non_blocking=True)
-            y = y.to(gpu, non_blocking=True)
+        #     x = x.to(gpu, non_blocking=True)
+        #     y = y.to(gpu, non_blocking=True)
 
-            if idr_torch.rank==0: stop_dataload = time()
+        #     if idr_torch.rank==0: stop_dataload = time()
 
-            if idr_torch.rank==0: start_training = time()
+        #     if idr_torch.rank==0: start_training = time()
 
-            a,x_topic,x = torch.split(x,[1,512,ang_pl],dim=1)
+        #     a,x_topic,x = torch.split(x,[1,512,ang_pl],dim=1)
 
-            output = model(a, x, y, x_topic)
+        #     output = model(a, x, y, x_topic)
 
-            output = output.view(-1, nw)
+        #     output = output.view(-1, nw)
 
-            y = y.long().view(-1)
+        #     y = y.long().view(-1)
 
-            loss = criterion(output, y)
+        #     loss = criterion(output, y)
 
-            if model.L2loss:
-                loss += alba*regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
+        #     if model.L2loss:
+        #         loss += alba*regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
 
-            train_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
+        #     train_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
 
-            optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
-            optimizer.step()
+        #     optimizer.zero_grad()
+        #     loss.backward()
+        #     torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+        #     optimizer.step()
 
-            train_loss += loss.item()
+        #     train_loss += loss.item()
 
-            if idr_torch.rank==0: stop_training = time()
-            if ((i + 1) % total_step//2 == 0) and (idr_torch.rank == 0):
-                print('\tStep [{}/{}], Loss: {:.4f}, Accuracy: {:.4f}, Time data load: {:.3f}ms, Time training: {:.3f}ms'.format(
-                                                                        i + 1, total_step, train_loss/len(train_data), train_accuracy/len(train_data),
-                                                                        (stop_dataload - start_dataload)*1000, (stop_training - start_training)*1000))
+        #     if idr_torch.rank==0: stop_training = time()
+        #     if ((i + 1) % total_step//2 == 0) and (idr_torch.rank == 0):
+        #         print('\tStep [{}/{}], Loss: {:.4f}, Accuracy: {:.4f}, Time data load: {:.3f}ms, Time training: {:.3f}ms'.format(
+        #                                                                 i + 1, total_step, train_loss/len(train_data), train_accuracy/len(train_data),
+        #                                                                 (stop_dataload - start_dataload)*1000, (stop_training - start_training)*1000))
 
-        model.eval()
+        # model.eval()
 
-        test_loss = 0
-        test_norm = 0
-        test_accuracy = 0
+        # test_loss = 0
+        # test_norm = 0
+        # test_accuracy = 0
 
-        with torch.no_grad():
+        # with torch.no_grad():
 
-            for x, y in test_data:
+        #     for x, y in test_data:
 
-                x = x.to_gpu(gpu, non_blocking=True)
-                y = y.to_gpu(gpu, non_blocking=True)
+        #         x = x.to_gpu(gpu, non_blocking=True)
+        #         y = y.to_gpu(gpu, non_blocking=True)
 
-                a,x_topic,x = torch.split(x,[1,512,ang_pl],dim=1)
+        #         a,x_topic,x = torch.split(x,[1,512,ang_pl],dim=1)
 
-                output = model(a, x, y, x_topic)
+        #         output = model(a, x, y, x_topic)
 
-                output = output.view(-1, nw)
+        #         output = output.view(-1, nw)
 
-                y = y.long().view(-1)
+        #         y = y.long().view(-1)
 
-                loss = criterion(output, y)
+        #         loss = criterion(output, y)
 
-                if model.L2loss:
-                    test_norm += alba*regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
+        #         if model.L2loss:
+        #             test_norm += alba*regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
 
-                test_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
+        #         test_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
 
-                test_loss += loss.item() + test_norm.item()
+        #         test_loss += loss.item() + test_norm.item()
 
-        # train_loss, train_accuracy = train_gpus(model, train_loader, optimizer, criterion, regularization, alba)
-        # test_loss, test_accuracy, test_L2loss = evaluate_gpus(model, test_loader, criterion, regularization, alba)
+        train_loss, train_accuracy = train_gpus(model, train_data, optimizer, criterion, regularization, alba)
+        test_loss, test_accuracy, test_norm = evaluate_gpus(model, test_data, criterion, regularization, alba)
 
         if idr_torch.rank ==0:
             if test_loss < best_valid_loss:
