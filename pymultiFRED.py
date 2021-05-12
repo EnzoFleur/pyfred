@@ -81,7 +81,7 @@ class pyfred(nn.Module):
         outputs = torch.zeros(batch_size, trg_len, self.nw).cuda()
 
         input = src[:,0]
-        
+
         for t in range(0, trg_len):
 
             output, hidden = self.single_step(a, input, hidden.contiguous())
@@ -125,7 +125,7 @@ def train_gpus(model, train_data, optimizer, criterion, regularization, alba = N
         loss = criterion(output, y)
 
         if model.L2loss:
-            loss += alba*regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
+            loss += alba*regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r).cuda())
 
         train_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
 
@@ -169,7 +169,7 @@ def evaluate_gpus(model, test_data, criterion, regularization, alba=None):
             loss = criterion(output, y)
 
             if model.L2loss:
-                test_norm += alba*regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
+                test_norm += alba*regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r).cuda())
 
             test_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
 
