@@ -125,7 +125,7 @@ def train_gpus(model, train_data, optimizer, criterion, regularization, alba = N
         loss = criterion(output, y)
 
         if model.L2loss:
-            loss += regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
+            loss += alba*regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
 
         train_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
 
@@ -189,9 +189,6 @@ if __name__ == "__main__":
                         world_size=idr_torch.size, 
                         rank=idr_torch.rank)
 
-    torch.cuda.set_device(idr_torch.local_rank)
-    gpu = torch.device("cuda")
-
     nlp = English()
     tokenizer = nlp.tokenizer
 
@@ -210,7 +207,7 @@ if __name__ == "__main__":
                         help='unique run id')
     parser.add_argument('-a','--alba', default=None, type=float,
                         help='Regularization coefficient')
-    parser.add_argument('-l','--L2loss', default=False, type=float,
+    parser.add_argument('-l','--L2loss', default=False, type=str,
                         help='Type of regularization (either USE, w2vec or None)')
     args = parser.parse_args()
 
@@ -314,8 +311,9 @@ if __name__ == "__main__":
 
     if idr_torch.rank==0: print("Dataset is ready to be loaded !")
 
-    model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=args.L2loss).cuda(gpu)
-
+    torch.cuda.set_device(idr_torch.local_rank)
+    gpu = torch.device("cuda")
+    model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=args.L2loss).to(gpu)
     ddp_model = DDP(model, device_ids=[idr_torch.local_rank])
 
     criterion = nn.NLLLoss(ignore_index = 0)

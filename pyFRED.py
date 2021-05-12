@@ -169,7 +169,7 @@ if __name__ == "__main__":
                         help='unique run id')
     parser.add_argument('-a','--alba', default=None, type=float,
                         help='Regularization coefficient')
-    parser.add_argument('-l','--L2loss', default=False, type=float,
+    parser.add_argument('-l','--L2loss', default=False, type=str,
                         help='Type of regularization (either USE, w2vec or None)')
     args = parser.parse_args()
 
