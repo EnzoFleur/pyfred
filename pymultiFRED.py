@@ -314,13 +314,10 @@ if __name__ == "__main__":
 
     if idr_torch.rank==0: print("Dataset is ready to be loaded !")
 
-    if idr_torch.rank==0: print("Stuck on A")
     model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=args.L2loss).cuda(gpu)
 
-    if idr_torch.rank==0: print("Stuck on B")
     ddp_model = DDP(model, device_ids=[idr_torch.local_rank])
 
-    if idr_torch.rank==0: print("Stuck on C")
     criterion = nn.NLLLoss(ignore_index = 0)
 
     if idr_torch.rank==0: print("Model is ready for training !")
