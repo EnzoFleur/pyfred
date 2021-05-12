@@ -95,7 +95,7 @@ class pyfred(nn.Module):
 
         return outputs
 
-def train(model, train_data, optimizer, criterion, regularization, alba = False):
+def train(model, train_data, optimizer, criterion, regularization, alba = None):
 
     model.train()
 
@@ -114,7 +114,7 @@ def train(model, train_data, optimizer, criterion, regularization, alba = False)
 
         loss = criterion(output, y)
 
-        if alba:
+        if model.L2loss:
             loss += alba*regularization(model.regularization(a, x, x_topic),torch.zeros(a.shape[0], model.r)) 
 
         train_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
@@ -128,7 +128,7 @@ def train(model, train_data, optimizer, criterion, regularization, alba = False)
 
     return train_loss / len(train_data), train_accuracy / len(train_data)
 
-def evaluate(model, test_data, criterion, regularization, alba=False):
+def evaluate(model, test_data, criterion, regularization, alba=None):
     model.eval()
 
     test_loss = 0
@@ -149,7 +149,7 @@ def evaluate(model, test_data, criterion, regularization, alba=False):
 
             loss = criterion(output, y)
 
-            if alba:
+            if model.L2loss:
                 test_norm += regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
 
             test_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
@@ -165,8 +165,12 @@ if __name__ == "__main__":
                         help='batch size. it will be divided in mini-batch for each worker')
     parser.add_argument('-e','--epochs', default=10, type=int, metavar='N',
                         help='number of total epochs to run')
-    parser.add_argument('-n','--name', default=None, type=str,
+    parser.add_argument('-n','--name', default="pyfred_multi", type=str,
                         help='unique run id')
+    parser.add_argument('-a','--alba', default=None, type=float,
+                        help='Regularization coefficient')
+    parser.add_argument('-l','--L2loss', default=False, type=float,
+                        help='Type of regularization (either USE, w2vec or None)')
     args = parser.parse_args()
 
     #all_files = os.listdir("lyrics/")   # imagine you're one directory above test dir
@@ -265,12 +269,15 @@ if __name__ == "__main__":
     train_data = DataLoader(TensorDataset(torch.tensor(X_train), torch.tensor(Y_train)), batch_size=batch_size)
     test_data = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(Y_test)), batch_size=batch_size)
 
-    model = pyfred(na, word_vectors, i2w, ang_pl, L2loss='w2vec')
+    model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=args.L2loss)
 
     criterion = nn.NLLLoss(ignore_index = 0)
 
-    alba = 0.1
-    if alba:
+    if model.L2loss:
+        alba = args.alba
+        if alba is None:
+            print("Alba is required !")
+            exit()
         regularization = nn.MSELoss()
 
     optimizer = optim.Adam(model.parameters(), lr=0.001)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8                      
-import os  
+import os
 from spacy.lang.en import English
 import pandas as pd
 import numpy as np
@@ -96,7 +96,7 @@ class pyfred(nn.Module):
 
         return outputs
 
-def train_gpus(model, train_data, optimizer, criterion, regularization, alba = False):
+def train_gpus(model, train_data, optimizer, criterion, regularization, alba = None):
 
     model.train()
 
@@ -124,7 +124,7 @@ def train_gpus(model, train_data, optimizer, criterion, regularization, alba = F
 
         loss = criterion(output, y)
 
-        if alba:
+        if model.L2loss:
             loss += regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
 
         train_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
@@ -144,7 +144,7 @@ def train_gpus(model, train_data, optimizer, criterion, regularization, alba = F
 
     return train_loss/len(train_data), train_accuracy/len(train_data)
 
-def evaluate_gpus(model, test_data, criterion, regularization, alba=False):
+def evaluate_gpus(model, test_data, criterion, regularization, alba=None):
     model.eval()
 
     test_loss = 0
@@ -168,7 +168,7 @@ def evaluate_gpus(model, test_data, criterion, regularization, alba=False):
 
             loss = criterion(output, y)
 
-            if alba:
+            if model.L2loss:
                 test_norm += regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
 
             test_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
@@ -206,8 +206,12 @@ if __name__ == "__main__":
                         help='batch size. it will be divided in mini-batch for each worker')
     parser.add_argument('-e','--epochs', default=10, type=int, metavar='N',
                         help='number of total epochs to run')
-    parser.add_argument('-n','--name', default=None, type=str,
+    parser.add_argument('-n','--name', default="pyfred_multi", type=str,
                         help='unique run id')
+    parser.add_argument('-a','--alba', default=None, type=float,
+                        help='Regularization coefficient')
+    parser.add_argument('-l','--L2loss', default=False, type=float,
+                        help='Type of regularization (either USE, w2vec or None)')
     args = parser.parse_args()
 
     #all_files = os.listdir("lyrics/")   # imagine you're one directory above test dir
@@ -311,7 +315,7 @@ if __name__ == "__main__":
     if idr_torch.rank==0: print("Dataset is ready to be loaded !")
 
     if idr_torch.rank==0: print("Stuck on A")
-    model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=False).to(gpu)
+    model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=args.L2loss).cuda(gpu)
 
     if idr_torch.rank==0: print("Stuck on B")
     ddp_model = DDP(model, device_ids=[idr_torch.local_rank])
@@ -321,8 +325,11 @@ if __name__ == "__main__":
 
     if idr_torch.rank==0: print("Model is ready for training !")
 
-    alba = 0.1
-    if alba:
+    if model.L2loss:
+        alba = args.alba
+        if alba is None:
+            print("Alba is required !")
+            exit()
         regularization = nn.MSELoss()
 
     optimizer = optim.Adam(ddp_model.parameters(), lr=0.001)
