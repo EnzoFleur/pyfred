@@ -155,8 +155,8 @@ def evaluate_gpus(model, test_data, criterion, regularization, alba=None):
 
         for x, y in test_data:
 
-            x = x.to_gpu(gpu, non_blocking=True)
-            y = y.to_gpu(gpu, non_blocking=True)
+            x = x.to(gpu, non_blocking=True)
+            y = y.to(gpu, non_blocking=True)
 
             a,x_topic,x = torch.split(x,[1,512,ang_pl],dim=1)
 
