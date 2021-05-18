@@ -104,7 +104,7 @@ def train_gpus(model, train_data, optimizer, criterion, regularization, alba = N
     train_accuracy = 0
     total_step = len(train_data)
     
-    for i, (x, y) in enumerate(train_data):
+    for i, (x, y) in enumerate(train_data, start=1):
         if idr_torch.rank==0: start_dataload = time()
 
         x = x.to(gpu, non_blocking=True)
@@ -137,12 +137,12 @@ def train_gpus(model, train_data, optimizer, criterion, regularization, alba = N
         train_loss += loss.item()
 
         if idr_torch.rank==0: stop_training = time()
-        if ((i + 1) % total_step//2 == 0) and (idr_torch.rank == 0):
+        if ((i==total_step) | (i==total_step//2)) and (idr_torch.rank == 0):
             print('\tStep [{}/{}], Loss: {:.4f}, Accuracy: {:.4f}, Time data load: {:.3f}ms, Time training: {:.3f}ms'.format(
-                                                                    i + 1, total_step, train_loss/len(train_data), train_accuracy/len(train_data),
+                                                                    i + 1, total_step, train_loss/i, train_accuracy/i,
                                                                     (stop_dataload - start_dataload)*1000, (stop_training - start_training)*1000))
 
-    return train_loss/len(train_data), train_accuracy/len(train_data)
+    return train_loss/total_step, train_accuracy/total_step
 
 def evaluate_gpus(model, test_data, criterion, regularization, alba=None):
     model.eval()
@@ -174,6 +174,9 @@ def evaluate_gpus(model, test_data, criterion, regularization, alba=None):
             test_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
 
             test_loss += loss.item() + test_norm.item()
+
+    print('\t Evaluation, Test Loss: {:.4f}, Test Accuracy: {:.4f}, Test Norm: {:.4f}'.format(
+                                        test_loss/len(test_data), test_accuracy/len(test_data),test_norm/len(test_data)))
 
     return test_loss/len(test_data), test_accuracy/len(test_data), test_norm/len(test_data)
 
@@ -357,81 +360,7 @@ if __name__ == "__main__":
     if idr_torch.rank == 0: start = datetime.now()
     for epoch in range(1, epochs+1):
 
-        if idr_torch.rank == 0: print(f'Epoch [{epoch}/{epochs} :')
-
-        # model.train()
-
-        # train_loss = 0
-        # train_accuracy = 0
-        # total_step = len(train_data)
-        
-        # for i, (x, y) in enumerate(train_data):
-        #     if idr_torch.rank==0: start_dataload = time()
-
-        #     x = x.to(gpu, non_blocking=True)
-        #     y = y.to(gpu, non_blocking=True)
-
-        #     if idr_torch.rank==0: stop_dataload = time()
-
-        #     if idr_torch.rank==0: start_training = time()
-
-        #     a,x_topic,x = torch.split(x,[1,512,ang_pl],dim=1)
-
-        #     output = model(a, x, y, x_topic)
-
-        #     output = output.view(-1, nw)
-
-        #     y = y.long().view(-1)
-
-        #     loss = criterion(output, y)
-
-        #     if model.L2loss:
-        #         loss += alba*regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
-
-        #     train_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
-
-        #     optimizer.zero_grad()
-        #     loss.backward()
-        #     torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
-        #     optimizer.step()
-
-        #     train_loss += loss.item()
-
-        #     if idr_torch.rank==0: stop_training = time()
-        #     if ((i + 1) % total_step//2 == 0) and (idr_torch.rank == 0):
-        #         print('\tStep [{}/{}], Loss: {:.4f}, Accuracy: {:.4f}, Time data load: {:.3f}ms, Time training: {:.3f}ms'.format(
-        #                                                                 i + 1, total_step, train_loss/len(train_data), train_accuracy/len(train_data),
-        #                                                                 (stop_dataload - start_dataload)*1000, (stop_training - start_training)*1000))
-
-        # model.eval()
-
-        # test_loss = 0
-        # test_norm = 0
-        # test_accuracy = 0
-
-        # with torch.no_grad():
-
-        #     for x, y in test_data:
-
-        #         x = x.to_gpu(gpu, non_blocking=True)
-        #         y = y.to_gpu(gpu, non_blocking=True)
-
-        #         a,x_topic,x = torch.split(x,[1,512,ang_pl],dim=1)
-
-        #         output = model(a, x, y, x_topic)
-
-        #         output = output.view(-1, nw)
-
-        #         y = y.long().view(-1)
-
-        #         loss = criterion(output, y)
-
-        #         if model.L2loss:
-        #             test_norm += alba*regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
-
-        #         test_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
-
-        #         test_loss += loss.item() + test_norm.item()
+        if idr_torch.rank == 0: print(f'Epoch [{epoch}/{epochs}] :')
 
         train_loss, train_accuracy = train_gpus(model, train_data, optimizer, criterion, regularization, alba)
         test_loss, test_accuracy, test_norm = evaluate_gpus(model, test_data, criterion, regularization, alba)
@@ -439,6 +368,7 @@ if __name__ == "__main__":
         if idr_torch.rank ==0:
             if test_loss < best_valid_loss:
                 best_valid_loss = test_loss
+                print(f"---- Saving model checkpoint at epoch {epoch} ----")
                 torch.save({'epoch':epoch,
                             'model_state_dict':model.state_dict(),
                             'optimizer_state_dict': optimizer.state_dict()},  f'training_checkpoints/pyfred_{name}_{epoch}.pt')
@@ -447,7 +377,7 @@ if __name__ == "__main__":
                 ff.write('%06f | %06f | %06f | %06f | %06f\n' % (train_loss, test_loss, train_accuracy*100, test_accuracy*100, test_norm))
 
     if idr_torch.rank == 0:
-        print(' -- Trained in ' + str(datetime.datetime.now()-start) + ' -- ')
+        print(' -- Trained in ' + str(datetime.now()-start) + ' -- ')
         A = []
         with torch.no_grad():
             for i in range(model.na):
