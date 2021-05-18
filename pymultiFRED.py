@@ -215,8 +215,8 @@ if __name__ == "__main__":
                         help='Type of regularization (either USE, w2vec or None)')
     args = parser.parse_args()
 
-    #all_files = os.listdir("lyrics/")   # imagine you're one directory above test dir
-    all_files = ["radiohead.txt","disney.txt", "adele.txt"]
+    all_files = os.listdir("../../datasets/lyrics/")   # imagine you're one directory above test dir
+    # all_files = ["radiohead.txt","disney.txt", "adele.txt"]
     n_vers = 8
     data = []
     authors = []
@@ -257,7 +257,8 @@ if __name__ == "__main__":
     # USE = hub.load(module_url)
     # print ("module %s loaded" % module_url)
     # D = np.asarray(USE(df["Raw"]),dtype=np.float32)
-    D=np.load("use_lyrics_512_3.npy")
+    # np.save("use_lyrics_512_27.npy", D)
+    D=np.load("use_lyrics_512_27.npy")
 
     from gensim.models import Word2Vec
     import numpy as np
