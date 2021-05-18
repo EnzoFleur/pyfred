@@ -380,7 +380,7 @@ if __name__ == "__main__":
         print(' -- Trained in ' + str(datetime.now()-start) + ' -- ')
         # A = []
         with torch.no_grad():
-            A = np.array(model.A.weight.data)
+            A = np.array(model.A.weight.data.cpu())
             print(A.shape)
             # for i in range(model.na):
             #     A.append(model.A(torch.tensor(i).cuda()).numpy())
