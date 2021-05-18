@@ -139,7 +139,7 @@ def train_gpus(model, train_data, optimizer, criterion, regularization, alba = N
         if idr_torch.rank==0: stop_training = time()
         if ((i==total_step) | (i==total_step//2)) and (idr_torch.rank == 0):
             print('\tStep [{}/{}], Loss: {:.4f}, Accuracy: {:.4f}, Time data load: {:.3f}ms, Time training: {:.3f}ms'.format(
-                                                                    i + 1, total_step, train_loss/i, train_accuracy/i,
+                                                                    i, total_step, train_loss/i, train_accuracy/i,
                                                                     (stop_dataload - start_dataload)*1000, (stop_training - start_training)*1000))
 
     return train_loss/total_step, train_accuracy/total_step
@@ -378,10 +378,12 @@ if __name__ == "__main__":
 
     if idr_torch.rank == 0:
         print(' -- Trained in ' + str(datetime.now()-start) + ' -- ')
-        A = []
+        # A = []
         with torch.no_grad():
-            for i in range(model.na):
-                A.append(model.A(torch.tensor(i).cuda()).numpy())
-            A = np.vstack(A)
+            A = np.array(model.A.weight.data)
+            print(A.shape)
+            # for i in range(model.na):
+            #     A.append(model.A(torch.tensor(i).cuda()).numpy())
+            # A = np.vstack(A)
             
         np.save(f"results/author_embeddings_{name}.npy", A)
