@@ -381,7 +381,7 @@ if __name__ == "__main__":
         A = []
         with torch.no_grad():
             for i in range(model.na):
-                A.append(model.A(torch.tensor(i)).numpy())
+                A.append(model.A(torch.tensor(i).cuda()).numpy())
             A = np.vstack(A)
             
         np.save(f"results/author_embeddings_{name}.npy", A)
