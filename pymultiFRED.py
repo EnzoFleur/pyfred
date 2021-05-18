@@ -174,8 +174,9 @@ def evaluate_gpus(model, test_data, criterion, regularization, alba=None):
             test_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
 
             test_loss += loss.item() + test_norm.item()
-
-    print('\t Evaluation, Test Loss: {:.4f}, Test Accuracy: {:.4f}, Test Norm: {:.4f}'.format(
+    
+    if idr_torch.rank ==0:
+        print('\t Evaluation, Test Loss: {:.4f}, Test Accuracy: {:.4f}, Test Norm: {:.4f}'.format(
                                         test_loss/len(test_data), test_accuracy/len(test_data),test_norm/len(test_data)))
 
     return test_loss/len(test_data), test_accuracy/len(test_data), test_norm/len(test_data)
@@ -378,12 +379,8 @@ if __name__ == "__main__":
 
     if idr_torch.rank == 0:
         print(' -- Trained in ' + str(datetime.now()-start) + ' -- ')
-        # A = []
         with torch.no_grad():
             A = np.array(model.A.weight.data.cpu())
             print(A.shape)
-            # for i in range(model.na):
-            #     A.append(model.A(torch.tensor(i).cuda()).numpy())
-            # A = np.vstack(A)
             
         np.save(f"results/author_embeddings_{name}.npy", A)
