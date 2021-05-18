@@ -138,9 +138,9 @@ def train_gpus(model, train_data, optimizer, criterion, regularization, alba = N
 
         if idr_torch.rank==0: stop_training = time()
         if ((i==total_step) | (i==total_step//2)) and (idr_torch.rank == 0):
-            print('\tStep [{}/{}], Loss: {:.4f}, Accuracy: {:.4f}, Time data load: {:.3f}ms, Time training: {:.3f}ms'.format(
+            print('\tStep [{}/{}], Loss: {:.4f}, Accuracy: {:.4f}, Time data load: {:.3f}s, Time training: {:.3f}s'.format(
                                                                     i, total_step, train_loss/i, train_accuracy/i,
-                                                                    (stop_dataload - start_dataload)*1000, (stop_training - start_training)*1000))
+                                                                    (stop_dataload - start_dataload), (stop_training - start_training)))
 
     return train_loss/total_step, train_accuracy/total_step
 
@@ -373,9 +373,9 @@ if __name__ == "__main__":
                 print(f"---- Saving model checkpoint at epoch {epoch} ----")
                 torch.save({'epoch':epoch,
                             'model_state_dict':model.state_dict(),
-                            'optimizer_state_dict': optimizer.state_dict()},  f'training_checkpoints/pyfred_{name}_{epoch}.pt')
+                            'optimizer_state_dict': optimizer.state_dict()},  f'training_checkpoints/{name}.pt')
 
-            with open(f"results/loss_pyfred_{name}.txt", "a") as ff:
+            with open(f"results/loss_{name}.txt", "a") as ff:
                 ff.write('%06f | %06f | %06f | %06f | %06f\n' % (train_loss, test_loss, train_accuracy*100, test_accuracy*100, test_norm))
 
     if idr_torch.rank == 0:
@@ -384,4 +384,4 @@ if __name__ == "__main__":
             A = np.array(model.A.weight.data.cpu())
             print(A.shape)
             
-        np.save(f"results/author_embeddings_{name}.npy", A)
+        np.save(f"results/A_{name}.npy", A)
