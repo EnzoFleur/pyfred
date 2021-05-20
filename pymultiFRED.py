@@ -53,7 +53,7 @@ class pyfred(nn.Module):
 
         x = torch.cat((a_embds, w_embds), 2)
 
-        out, hid = self.decoder(x.float(), hidden.unsqueeze(0))
+        out, (hid, _) = self.decoder(x.float(), (hidden.unsqueeze(0), torch.randn(hidden.shape).cuda()))
         
         dec = self.mapper(out.squeeze(1))
 
@@ -77,8 +77,6 @@ class pyfred(nn.Module):
 
         batch_size = a.shape[0]
         trg_len = trg.shape[1]
-
-        cell = torch.randn(hidden.shape).cuda()
         
         outputs = torch.zeros(batch_size, trg_len, self.nw).cuda()
 
@@ -86,7 +84,7 @@ class pyfred(nn.Module):
 
         for t in range(0, trg_len):
 
-            output, hidden = self.single_step(a, input, hidden.contiguous(), cell)
+            output, hidden = self.single_step(a, input, hidden.contiguous())
 
             outputs[:,0] = output
 
