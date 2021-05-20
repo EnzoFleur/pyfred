@@ -36,7 +36,7 @@ class pyfred(nn.Module):
         self.W = nn.Embedding.from_pretrained(torch.from_numpy(W))
 
         self.A = nn.Embedding(self.na, self.r)
-        self.decoder = nn.GRU(2*self.r, nhid, bidirectional=False, batch_first=True)
+        self.decoder = nn.LSTM(2*self.r, nhid, bidirectional=False, batch_first=True)
 
         self.drop = nn.Dropout(0.2)
 
@@ -77,6 +77,8 @@ class pyfred(nn.Module):
 
         batch_size = a.shape[0]
         trg_len = trg.shape[1]
+
+        cell = torch.randn(hidden.shape).cuda()
         
         outputs = torch.zeros(batch_size, trg_len, self.nw).cuda()
 
@@ -84,7 +86,7 @@ class pyfred(nn.Module):
 
         for t in range(0, trg_len):
 
-            output, hidden = self.single_step(a, input, hidden.contiguous())
+            output, hidden = self.single_step(a, input, hidden.contiguous(), cell)
 
             outputs[:,0] = output
 
