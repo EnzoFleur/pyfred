@@ -53,7 +53,7 @@ class pyfred(nn.Module):
 
         x = torch.cat((a_embds, w_embds), 2)
 
-        out, (hid, _) = self.decoder(x.float(), (hidden.unsqueeze(0), torch.randn(hidden.shape).cuda()))
+        out, (hid, _) = self.decoder(x.float(), (hidden.unsqueeze(0), torch.randn(hidden.shape).unsqueeze(0).cuda()))
         
         dec = self.mapper(out.squeeze(1))
 
