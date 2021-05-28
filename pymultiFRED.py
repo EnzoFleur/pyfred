@@ -333,6 +333,8 @@ if __name__ == "__main__":
             print("Alba is required !")
             exit()
         regularization = nn.MSELoss()
+    else:
+        regularization=None
 
     optimizer = optim.Adam(ddp_model.parameters(), lr=0.001)
 
