@@ -335,6 +335,7 @@ if __name__ == "__main__":
         regularization = nn.MSELoss()
     else:
         regularization=None
+        alba=None
 
     optimizer = optim.Adam(ddp_model.parameters(), lr=0.001)
 
