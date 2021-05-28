@@ -36,7 +36,8 @@ class pyfred(nn.Module):
         self.W = nn.Embedding.from_pretrained(torch.from_numpy(W))
 
         self.A = nn.Embedding(self.na, self.r)
-        self.decoder = nn.LSTM(2*self.r, nhid, bidirectional=False, batch_first=True)
+        # self.decoder = nn.LSTM(2*self.r, nhid, bidirectional=False, batch_first=True)
+        self.decoder = nn.GRU(2*self.r, nhid, bidirectional=False, batch_first=True)
 
         self.drop = nn.Dropout(0.2)
 
@@ -53,8 +54,9 @@ class pyfred(nn.Module):
 
         x = torch.cat((a_embds, w_embds), 2)
 
-        out, (hid, _) = self.decoder(x.float(), (hidden.unsqueeze(0), torch.randn(hidden.shape).unsqueeze(0).cuda()))
-        
+        # out, (hid, _) = self.decoder(x.float(), (hidden.unsqueeze(0), torch.randn(hidden.shape).unsqueeze(0).cuda()))
+        out, hid = self.decoder(x.float(), hidden.unsqueeze(0))
+
         dec = self.mapper(out.squeeze(1))
 
         return F.log_softmax(dec, dim=-1), hid.squeeze(0)

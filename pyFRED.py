@@ -15,6 +15,10 @@ from torch import nn
 import torch.nn.functional as F
 import torch.optim as optim
 
+from sklearn.preprocessing import normalize
+from sklearn.metrics import coverage_error,label_ranking_average_precision_score, precision_score
+
+
 nlp = English()
 tokenizer = nlp.tokenizer
 
@@ -95,93 +99,60 @@ class pyfred(nn.Module):
 
         return outputs
 
-def train(model, train_data, optimizer, criterion, regularization, alba = None):
+    def translate(self, a, src, hidden, trg_len=30, generate=False, complete=0):
 
-    model.train()
+        with torch.no_grad():
+            batch_size = a.shape[0]
 
-    train_loss = 0
-    train_accuracy = 0
+            outputs = np.zeros((batch_size, trg_len))
+            input = src[:,0]
 
-    for batch, (x, y) in enumerate(tqdm(train_data)):
+            if generate:
+                hidden=torch.randn(batch_size, 512)
 
-        a,x_topic,x = torch.split(x,[1,512,ang_pl],dim=1)
+            for t in range(0,trg_len):
 
-        output = model(a, x, y, x_topic)
+                output, hidden = self.single_step(a, input, hidden)
 
-        output = output.view(-1, nw)
+                if t<complete:
+                    input=src[:,t+1]
+                else:
+                    output = torch.exp(output)
+                    val, argval = torch.topk(output, 5, axis=1)
+                    val = F.normalize(val,p=1, dim=1)
+                    input=argval[[i for i in range(batch_size)],torch.multinomial(val, 1)[:,0]]
+                
+                outputs[:,t] = input 
 
-        y = y.long().view(-1)
+        outputs=np.vectorize(self.i2w.get)(outputs)
 
-        loss = criterion(output, y)
-
-        if model.L2loss:
-            loss += alba*regularization(model.regularization(a, x, x_topic),torch.zeros(a.shape[0], model.r)) 
-
-        train_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
-
-        optimizer.zero_grad()
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
-        optimizer.step()
-
-        train_loss += loss.item()
-
-    return train_loss / len(train_data), train_accuracy / len(train_data)
-
-def evaluate(model, test_data, criterion, regularization, alba=None):
-    model.eval()
-
-    test_loss = 0
-    test_norm = 0
-    test_accuracy = 0
-
-    with torch.no_grad():
-
-        for x, y in tqdm(test_data):
-
-            a,x_topic,x = torch.split(x,[1,512,ang_pl],dim=1)
-
-            output = model(a, x, y, x_topic)
-
-            output = output.view(-1, nw)
-
-            y = y.long().view(-1)
-
-            loss = criterion(output, y)
-
-            if model.L2loss:
-                test_norm += regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
-
-            test_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
-
-            test_loss += loss.item()
-
-    return test_loss/len(test_data), test_accuracy/len(test_data), alba*test_norm/len(test_data)
+        return outputs
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-b', '--batch-size', default=32, type =int,
-                        help='batch size. it will be divided in mini-batch for each worker')
-    parser.add_argument('-e','--epochs', default=10, type=int, metavar='N',
-                        help='number of total epochs to run')
     parser.add_argument('-n','--name', default="pyfred_multi", type=str,
                         help='unique run id')
-    parser.add_argument('-a','--alba', default=None, type=float,
-                        help='Regularization coefficient')
     parser.add_argument('-l','--L2loss', default=False, type=str,
                         help='Type of regularization (either USE, w2vec or None)')
     args = parser.parse_args()
 
-    #all_files = os.listdir("lyrics/")   # imagine you're one directory above test dir
-    all_files = ["radiohead.txt","disney.txt", "adele.txt"]
+    name=args.name
+    L2loss = args.L2loss
+
+    os.chdir('c:\\Users\\EnzoT\\Documents\\code\\pyfred')
+
+    all_files = [os.path.join("..\\LyricsGeneration\\lyrics", file) for file in os.listdir("..\\LyricsGeneration\\lyrics")]  # imagine you're one directory above test dir
+    test_files = [os.path.join("..\\LyricsGeneration\\lyricsFull", file) for file in ["johnny-cash.txt"]]
+    all_files = [*all_files, *test_files]
+    # all_files = ["radiohead.txt","disney.txt", "adele.txt"]
     n_vers = 8
     data = []
     authors = []
     for file in all_files:
-        author = file.split(".")[0]
+        author = file.split('\\')[-1].split(".")[0]
         authors.append(author)
-        with open('../../datasets/lyrics/'+file, 'r',encoding="utf-8") as fp:
+        with open(file, 'r',encoding="utf-8") as fp:
             line = fp.readline()
             sentence = []   
             sentence.append(line.replace("\n"," newLine"))
@@ -199,6 +170,9 @@ if __name__ == "__main__":
                 data.append((author,sent,tok))
                 
     df = pd.DataFrame(data, columns =['Author', 'Raw', 'Tokens']) 
+    test_df = df[df.Author == "johnny-cash"]
+    df = df[df.Author != "johnny-cash"]
+    authors=df.Author.unique()
     aut2id = dict(zip(authors,range(len(authors))))
     df.head()
     
@@ -209,13 +183,13 @@ if __name__ == "__main__":
 
     # ### Training Word2Vec and USE
 
-    # print("USE encoding")
-    # import tensorflow_hub as hub
-    # module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
-    # USE = hub.load(module_url)
-    # print ("module %s loaded" % module_url)
+    print("USE encoding")
+    import tensorflow_hub as hub
+    module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
+    USE = hub.load(module_url)
+    print ("module %s loaded" % module_url)
     # D = np.asarray(USE(df["Raw"]),dtype=np.float32)
-    D=np.load("use_lyrics_512_3.npy")
+    D=np.load("use_lyrics_512_27.npy")
 
     from gensim.models import Word2Vec
     import numpy as np
@@ -252,61 +226,60 @@ if __name__ == "__main__":
     authors_id = np.asarray([aut2id[i] for i in list(df['Author'])])
     authors_id = np.expand_dims(authors_id, 1)
 
-    batch_size = args.batch_size
-    epochs=args.epochs
-    name=args.name
-
-    X = np.hstack([authors_id,D,ang_tok])
-    Y = np.hstack([ang_tok_shift])
-
-    X = X.astype(np.float32)
-
     from sklearn.model_selection import train_test_split
     from torch.utils.data import TensorDataset, DataLoader
 
-    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, train_size=0.80, random_state=101)
+    model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=L2loss)
 
-    train_data = DataLoader(TensorDataset(torch.tensor(X_train), torch.tensor(Y_train)), batch_size=batch_size)
-    test_data = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(Y_test)), batch_size=batch_size)
+    checkpoint = torch.load(f'training_checkpoints\\{name}.pt', map_location=torch.device("cpu"))
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
 
-    model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=args.L2loss)
-
-    criterion = nn.NLLLoss(ignore_index = 0)
-
-    if model.L2loss:
-        alba = args.alba
-        if alba is None:
-            print("Alba is required !")
-            exit()
-        regularization = nn.MSELoss()
-
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-    start = datetime.datetime.now()
-
-    best_valid_loss = float('inf')
-    for epoch in range(1, epochs+1):
-
-        train_loss, train_accuracy = train(model, train_data, optimizer, criterion, regularization, alba)
-        test_loss, test_accuracy, test_L2loss = evaluate(model, test_data, criterion, regularization, alba)
-
-        print('\nEpoch {} | Loss: {:.4f}, Accuracy: {:.4f}, Test Loss: {:.4f}, L2 Test Loss : {:.4f}, Test Accuracy: {:.4f}'.format(epoch,
-        train_loss, train_accuracy * 100, test_loss, test_L2loss, test_accuracy*100), flush=True)
-
-        if (test_loss < best_valid_loss) | (epoch % 10 ==0):
-            best_valid_loss = test_loss
-            torch.save({'epoch':epoch,
-                        'model_state_dict':model.state_dict(),
-                        'optimizer_state_dict': optimizer.state_dict()}, f'training_checkpoints/pyfred_{name}_{epoch}.pt')
-
-        with open(f"results/loss_pyfred_{name}.txt", "a") as ff:
-            ff.write('%06f | %06f | %06f | %06f | %06f\n' % (train_loss, test_loss, train_accuracy*100, test_accuracy*100, test_L2loss))
-
-    print(' -- Trained in ' + str(datetime.datetime.now()-start) + ' -- ')
-    A = []
     with torch.no_grad():
-        for i in range(model.na):
-            A.append(model.A(torch.tensor(i)).numpy())
-        A = np.vstack(A)
+        if L2loss=='USE':
+            doc_embds = model.reducer(torch.tensor(D)).numpy()
+        elif L2loss=='w2vec':
+            doc_embds = model.W(torch.tensor(ang_tok))
+            mask = (doc_embds!=0)
+            doc_embds = doc_embds.sum(1)/mask.sum(1).numpy()
+
+    aut_embds = np.load(f"results\\A_{name}.npy")
+
+    _, X_test, _, Y_test = train_test_split(doc_embds, authors_id[:,0], test_size=0.3, random_state=13)
+    Y_test_proba=np.zeros((len(Y_test),na))
+    Y_test_proba[[i for i in range(len(Y_test))],Y_test]=1
+
+    Y_score = normalize(X_test, axis=1) @ normalize(aut_embds, axis=1).transpose()
+    Y_pred = np.argmax(Y_score, axis=1)
+
+    ce = coverage_error(Y_test_proba, Y_score)/na
+    lr = label_ranking_average_precision_score(Y_test_proba, Y_score)
+    pr = precision_score(Y_test, Y_pred, average='micro')
+    print(ce, lr, pr)
+    with open(os.path.join("results","comparaison.txt"), 'a+', encoding='utf-8') as file:
+        file.write(f"{name}:{ce} {lr} {pr}")
+
+    batch_size=na
+    vec_test=torch.tensor(USE(test_df["Raw"]).numpy())
+    a_test=torch.tensor([i for i in range(na)]).repeat(vec_test.shape[0]).unsqueeze(1)
+    x_test=torch.tensor([word_map["<S>"] for i in range(na)]).repeat(vec_test.shape[0]).unsqueeze(1)
+    vec_test=vec_test.repeat_interleave(na, dim=0)
+
+    test_data = DataLoader(TensorDataset(a_test, vec_test, x_test), batch_size=batch_size)
+
+    trg_len=list(test_df.Tokens.str.len())
+    for batch, [a_test, vec_test, x_test] in tqdm(enumerate(test_data), total=len(test_data)):
+
+        output=model.translate(a_test, x_test, vec_test, trg_len=trg_len[batch]+5, generate=True)
         
-    np.save(f"results/author_embeddings_torch_{name}.npy", A)
+        for aut, id in aut2id.items():
+            with open(os.path.join("new_songs", f"{name}_{aut}.txt"), "a+") as file:
+                file.write(' '.join(output[0]).replace("newLine", "\n"))
+                file.write("\n")
+
+    # vec=torch.tensor(USE(["All you need is love, love. Love is all you need."]).numpy())
+    # a=torch.tensor([i for i in range(na)]).view(29,1)
+    # input=torch.tensor([word_map["<S>"], word_map["love"]]*na).view(na, -1)
+    # vec=torch.tile(vec, (na, 1))
+
+    # model.translate(a, input, vec, trg_len=30, complete=1)
