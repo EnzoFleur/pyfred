@@ -72,26 +72,55 @@ class pyfred(nn.Module):
         return (w_embds - a_embds).float()
 
 
-    def forward(self, a, src, trg, hidden, teacher_forcing_ratio = 0.5):
+    def forward(self, a, src, trg, hidden, teacher_forcing_ratio = 1):
 
         batch_size = a.shape[0]
         trg_len = trg.shape[1]
         
-        outputs = torch.zeros(batch_size, trg_len, self.nw)
+        outputs = torch.zeros(batch_size, trg_len, model.nw)
 
         input = src[:,0]
 
         for t in range(0, trg_len):
 
-            output, hidden = self.single_step(a, input, hidden)
+            output, hidden = model.single_step(a, input, hidden)
 
-            outputs[:,0] = output
+            outputs[:,t] = output
 
             teacher_force = random.random() < teacher_forcing_ratio
 
             top1 = output.argmax(1)
 
             input = trg[:,t] if teacher_force else top1
+
+        return outputs
+
+    def translate(self, a, src, hidden, trg_len=30, generate=False, complete=0):
+
+        with torch.no_grad():
+            batch_size = a.shape[0]
+
+            outputs = np.zeros((batch_size, trg_len))
+            input = src[:,0]
+
+            if generate:
+                hidden=torch.randn(batch_size, 512)
+
+            for t in range(0,trg_len):
+
+                output, hidden = self.single_step(a, input, hidden)
+
+                if t<complete:
+                    input=src[:,t+1]
+                else:
+                    output = torch.exp(output)
+                    val, argval = torch.topk(output, 5, axis=1)
+                    val = F.normalize(val,p=1, dim=1)
+                    input=argval[[i for i in range(batch_size)],torch.multinomial(val, 1)[:,0]]
+                
+                outputs[:,t] = input 
+
+        outputs=np.vectorize(self.i2w.get)(outputs)
 
         return outputs
 
@@ -174,14 +203,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     #all_files = os.listdir("lyrics/")   # imagine you're one directory above test dir
-    all_files = ["radiohead.txt","disney.txt", "adele.txt"]
+    all_files = ["radiohead.txt","disney.txt", "rihanna.txt"]
     n_vers = 8
     data = []
     authors = []
     for file in all_files:
         author = file.split(".")[0]
         authors.append(author)
-        with open('../../datasets/lyrics/'+file, 'r',encoding="utf-8") as fp:
+        with open('..\\..\\datasets\\lyrics29\\'+file, 'r',encoding="utf-8") as fp:
             line = fp.readline()
             sentence = []   
             sentence.append(line.replace("\n"," newLine"))
@@ -209,13 +238,13 @@ if __name__ == "__main__":
 
     # ### Training Word2Vec and USE
 
-    # print("USE encoding")
-    # import tensorflow_hub as hub
-    # module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
-    # USE = hub.load(module_url)
-    # print ("module %s loaded" % module_url)
-    # D = np.asarray(USE(df["Raw"]),dtype=np.float32)
-    D=np.load("use_lyrics_512_3.npy")
+    print("USE encoding")
+    import tensorflow_hub as hub
+    module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
+    USE = hub.load(module_url)
+    print ("module %s loaded" % module_url)
+    D = np.asarray(USE(df["Raw"]),dtype=np.float32)
+    # D=np.load("use_lyrics_512_3.npy")
 
     from gensim.models import Word2Vec
     import numpy as np
@@ -255,6 +284,7 @@ if __name__ == "__main__":
     batch_size = args.batch_size
     epochs=args.epochs
     name=args.name
+    L2loss=args.L2loss
 
     X = np.hstack([authors_id,D,ang_tok])
     Y = np.hstack([ang_tok_shift])
@@ -269,7 +299,7 @@ if __name__ == "__main__":
     train_data = DataLoader(TensorDataset(torch.tensor(X_train), torch.tensor(Y_train)), batch_size=batch_size)
     test_data = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(Y_test)), batch_size=batch_size)
 
-    model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=args.L2loss)
+    model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=L2loss)
 
     criterion = nn.NLLLoss(ignore_index = 0)
 
@@ -279,6 +309,9 @@ if __name__ == "__main__":
             print("Alba is required !")
             exit()
         regularization = nn.MSELoss()
+    else:
+        regularization = None
+        alba = None
 
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 

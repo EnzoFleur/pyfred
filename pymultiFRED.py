@@ -88,7 +88,7 @@ class pyfred(nn.Module):
 
             output, hidden = self.single_step(a, input, hidden.contiguous())
 
-            outputs[:,0] = output
+            outputs[:,t] = output
 
             teacher_force = random.random() < teacher_forcing_ratio
 
