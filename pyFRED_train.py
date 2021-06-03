@@ -122,6 +122,9 @@ class pyfred(nn.Module):
 
         outputs=np.vectorize(self.i2w.get)(outputs)
 
+        for index in np.argwhere(output=="</S>"):
+            output[index[0], index[1]+1:]=""
+
         return outputs
 
 def train(model, train_data, optimizer, criterion, regularization, alba = None):
@@ -135,7 +138,7 @@ def train(model, train_data, optimizer, criterion, regularization, alba = None):
 
         a,x_topic,x = torch.split(x,[1,512,ang_pl],dim=1)
 
-        output = model(a, x, y, x_topic)
+        output = model(a, x, y, x_topic, teacher_forcing_ratio=1)
 
         output = output.view(-1, nw)
 
@@ -179,13 +182,15 @@ def evaluate(model, test_data, criterion, regularization, alba=None):
             loss = criterion(output, y)
 
             if model.L2loss:
-                test_norm += regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
+                test_norm += alba*regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r))
+                test_loss += loss.item() + test_norm.item()
+            else:
+                test_norm = 0
+                test_loss += loss.item()
 
             test_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
 
-            test_loss += loss.item()
-
-    return test_loss/len(test_data), test_accuracy/len(test_data), alba*test_norm/len(test_data)
+    return test_loss/len(test_data), test_accuracy/len(test_data), test_norm/len(test_data)
 
 if __name__ == "__main__":
 
@@ -331,6 +336,20 @@ if __name__ == "__main__":
             torch.save({'epoch':epoch,
                         'model_state_dict':model.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict()}, f'training_checkpoints/pyfred_{name}_{epoch}.pt')
+
+        vec_test=torch.tensor(USE(["All you need is love, love. Love is all you need."]).numpy())
+        a_test=torch.tensor([i for i in range(na)]).repeat(vec_test.shape[0]).unsqueeze(1)
+        x_test=torch.tensor([word_map["<S>"] for i in range(na)]).repeat(vec_test.shape[0]).unsqueeze(1)
+        vec_test=vec_test.repeat_interleave(na, dim=0)
+        generate_data = DataLoader(TensorDataset(a_test, vec_test, x_test), batch_size=na)
+
+        for batch, [a_test, vec_test, x_test] in enumerate(generate_data):
+
+            output=model.translate(a_test, x_test, vec_test, trg_len=50)
+
+            for aut, id in aut2id.items():
+                print(f"{aut} singing the Beatles : ")
+                print(' '.join(output[id]).replace("newline", "\n"), '\n')
 
         with open(f"results/loss_pyfred_{name}.txt", "a") as ff:
             ff.write('%06f | %06f | %06f | %06f | %06f\n' % (train_loss, test_loss, train_accuracy*100, test_accuracy*100, test_L2loss))

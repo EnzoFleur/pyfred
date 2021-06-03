@@ -75,7 +75,7 @@ class pyfred(nn.Module):
         return (w_embds - a_embds).float()
 
 
-    def forward(self, a, src, trg, hidden, teacher_forcing_ratio = 0.5):
+    def forward(self, a, src, trg, hidden, teacher_forcing_ratio = 1):
 
         batch_size = a.shape[0]
         trg_len = trg.shape[1]
@@ -95,6 +95,38 @@ class pyfred(nn.Module):
             top1 = output.argmax(1)
 
             input = trg[:,t] if teacher_force else top1
+
+        return outputs
+
+    def translate(self, a, src, hidden, trg_len=100, generate=False, complete=0):
+
+        with torch.no_grad():
+            batch_size = a.shape[0]
+
+            outputs = np.zeros((batch_size, trg_len)).cuda()
+            input = src[:,0]
+
+            if generate:
+                hidden=torch.randn(batch_size, 512)
+
+            for t in range(0,trg_len):
+
+                output, hidden = self.single_step(a, input, hidden)
+
+                if t<complete:
+                    input=src[:,t+1]
+                else:
+                    output = torch.exp(output)
+                    val, argval = torch.topk(output, 5, axis=1)
+                    val = F.normalize(val,p=1, dim=1)
+                    input=argval[[i for i in range(batch_size)],torch.multinomial(val, 1)[:,0]]
+                
+                outputs[:,t] = input 
+
+        outputs=np.vectorize(self.i2w.get)(outputs)
+
+        for index in np.argwhere(output=="</S>"):
+            output[index[0], index[1]+1:]=""
 
         return outputs
 
@@ -376,16 +408,17 @@ if __name__ == "__main__":
         test_loss, test_accuracy, test_norm = evaluate_gpus(model, test_data, criterion, regularization, alba)
 
         if idr_torch.rank ==0:
-            if test_loss < best_valid_loss:
+            if (test_loss < best_valid_loss)|(epoch%10==0):
+                suffix='best' if (test_loss < best_valid_loss) else 'last'
                 best_valid_loss = test_loss
                 print(f"---- Saving model checkpoint at epoch {epoch} ----")
                 torch.save({'epoch':epoch,
                             'model_state_dict':model.state_dict(),
-                            'optimizer_state_dict': optimizer.state_dict()},  f'training_checkpoints/{name}.pt')
+                            'optimizer_state_dict': optimizer.state_dict()},  f'training_checkpoints/{name}_{suffix}.pt')
 
             with open(f"results/loss_{name}.txt", "a") as ff:
                 ff.write('%06f | %06f | %06f | %06f | %06f\n' % (train_loss, test_loss, train_accuracy*100, test_accuracy*100, test_norm))
-
+            
     if idr_torch.rank == 0:
         print(' -- Trained in ' + str(datetime.now()-start) + ' -- ')
         with torch.no_grad():
