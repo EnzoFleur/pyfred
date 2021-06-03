@@ -75,7 +75,7 @@ class pyfred(nn.Module):
         return (w_embds - a_embds).float()
 
 
-    def forward(self, a, src, trg, hidden, teacher_forcing_ratio = 1):
+    def forward(self, a, src, trg, hidden, teacher_forcing_ratio = 0.5):
 
         batch_size = a.shape[0]
         trg_len = trg.shape[1]
