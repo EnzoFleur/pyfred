@@ -103,7 +103,7 @@ class pyfred(nn.Module):
         with torch.no_grad():
             batch_size = a.shape[0]
 
-            outputs = np.zeros((batch_size, trg_len)).cuda()
+            outputs = torch.zeros((batch_size, trg_len)).cuda()
             input = src[:,0]
 
             if generate:
@@ -123,6 +123,7 @@ class pyfred(nn.Module):
                 
                 outputs[:,t] = input 
 
+        outputs=outputs.numpy()
         outputs=np.vectorize(self.i2w.get)(outputs)
 
         for index in np.argwhere(output=="</S>"):
