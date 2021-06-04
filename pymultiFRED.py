@@ -111,7 +111,7 @@ class pyfred(nn.Module):
 
             for t in range(0,trg_len):
 
-                output, hidden = self.single_step(a, input, hidden)
+                output, hidden = self.single_step(a, input, hidden.contiguous())
 
                 if t<complete:
                     input=src[:,t+1]
