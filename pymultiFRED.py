@@ -422,7 +422,8 @@ if __name__ == "__main__":
             
         if (idr_torch.rank == 0) & (epoch%2==0):
 
-            x=torch.tensor(np.load("vec_test.npy")).cuda()
+            model.eval()
+            x=torch.tensor(np.load("vec_test.npy"), dtype=torch.float).cuda()
 
             x_topic,a,x = torch.split(x,[512,1,1],dim=1)
 
