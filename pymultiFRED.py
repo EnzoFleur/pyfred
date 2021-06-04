@@ -252,8 +252,8 @@ if __name__ == "__main__":
                         help='Type of regularization (either USE, w2vec or None)')
     args = parser.parse_args()
 
-    all_files = os.listdir("../../datasets/lyrics/")   # imagine you're one directory above test dir
-    # all_files = ["radiohead.txt","disney.txt", "adele.txt"]
+    # all_files = os.listdir("../../datasets/lyrics/")   # imagine you're one directory above test dir
+    all_files = ["radiohead.txt","disney.txt", "adele.txt"]
     n_vers = 8
     data = []
     authors = []
@@ -295,7 +295,7 @@ if __name__ == "__main__":
     # print ("module %s loaded" % module_url)
     # D = np.asarray(USE(df["Raw"]),dtype=np.float32)
     # np.save("use_lyrics_512_27.npy", D)
-    D=np.load("use_lyrics_512_27.npy")
+    D=np.load("use_lyrics_512_3.npy")
 
     from gensim.models import Word2Vec
     import numpy as np
@@ -419,6 +419,20 @@ if __name__ == "__main__":
             with open(f"results/loss_{name}.txt", "a") as ff:
                 ff.write('%06f | %06f | %06f | %06f | %06f\n' % (train_loss, test_loss, train_accuracy*100, test_accuracy*100, test_norm))
             
+        if (idr_torch.rank == 0) & (epoch%2==0):
+
+            x=torch.tensor(np.load("vec_test.npy")).cuda()
+
+            x_topic,a,x = torch.split(x,[512,1,1],dim=1)
+
+            output=model.translate(a, x, x_topic, trg_len=50)
+
+            for aut, id in {"Radiohead":1,"Disney":0}.items():
+            # for aut, id in {"Rihanna":1,"Eminem":0}.items():
+                with open(f"results/{name}_songs.txt") as song:
+                    song.write(f"[{epoch}/{epochs}]  {aut} singing the Beatles : \n")
+                    song.write(' '.join(output[id]).replace("newline", "\n"), '\n')
+
     if idr_torch.rank == 0:
         print(' -- Trained in ' + str(datetime.now()-start) + ' -- ')
         with torch.no_grad():

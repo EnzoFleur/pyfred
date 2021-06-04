@@ -39,8 +39,8 @@ class pyfred(nn.Module):
         self.W = nn.Embedding.from_pretrained(torch.from_numpy(W))
 
         self.A = nn.Embedding(self.na, self.r)
-        # self.decoder = nn.GRU(2*self.r, nhid, bidirectional=False, batch_first=True)
-        self.decoder = nn.LSTM(2*self.r, nhid, bidirectional=False, batch_first=True)
+        self.decoder = nn.GRU(2*self.r, nhid, bidirectional=False, batch_first=True)
+        # self.decoder = nn.LSTM(2*self.r, nhid, bidirectional=False, batch_first=True)
 
         self.drop = nn.Dropout(0.2)
 
@@ -57,8 +57,8 @@ class pyfred(nn.Module):
 
         x = torch.cat((a_embds, w_embds), 2)
 
-        # out, hid = self.decoder(x.float(), hidden.unsqueeze(0))
-        out, (hid, _) = self.decoder(x.float(), (hidden.unsqueeze(0), torch.randn(hidden.shape).unsqueeze(0)))
+        out, hid = self.decoder(x.float(), hidden.unsqueeze(0))
+        # out, (hid, _) = self.decoder(x.float(), (hidden.unsqueeze(0), torch.randn(hidden.shape).unsqueeze(0)))
 
         dec = self.mapper(out.squeeze(1))
 
@@ -127,6 +127,9 @@ class pyfred(nn.Module):
                 outputs[:,t] = input 
 
         outputs=np.vectorize(self.i2w.get)(outputs)
+
+        for index in np.argwhere(output=="</S>"):
+            output[index[0], index[1]+1:]=""
 
         return outputs
 
@@ -272,11 +275,11 @@ if __name__ == "__main__":
     trg_len=list(test_df.Tokens.str.len())
     for batch, [a_test, vec_test, x_test] in tqdm(enumerate(test_data), total=len(test_data)):
 
-        output=model.translate(a_test, x_test, vec_test, trg_len=trg_len[batch]+5, generate=True)
+        output=model.translate(a_test, x_test, vec_test, trg_len=trg_len, generate=True)
         
         for aut, id in aut2id.items():
             with open(os.path.join("new_songs", f"{name}_{aut}.txt"), "a+") as file:
-                file.write(' '.join(output[0]).replace("newLine", "\n"))
+                file.write(' '.join(output[id]).replace("newline", "\n"))
                 file.write("\n")
 
     # vec=torch.tensor(USE(["All you need is love, love. Love is all you need."]).numpy())
