@@ -75,7 +75,7 @@ class pyfred(nn.Module):
         return (w_embds - a_embds).float()
 
 
-    def forward(self, a, src, trg, hidden, teacher_forcing_ratio = 0.5):
+    def forward(self, a, src, trg, hidden, teacher_forcing_ratio = 1):
 
         batch_size = a.shape[0]
         trg_len = trg.shape[1]
@@ -247,8 +247,8 @@ if __name__ == "__main__":
                         help='Type of regularization (either USE, w2vec or None)')
     args = parser.parse_args()
 
-    # all_files = os.listdir("../../datasets/lyrics/")   # imagine you're one directory above test dir
-    all_files = ["radiohead.txt","disney.txt", "adele.txt"]
+    all_files = os.listdir("../../datasets/lyrics/")   # imagine you're one directory above test dir
+    # all_files = ["radiohead.txt","disney.txt", "adele.txt"]
     n_vers = 8
     data = []
     authors = []
@@ -289,8 +289,8 @@ if __name__ == "__main__":
     # USE = hub.load(module_url)
     # print ("module %s loaded" % module_url)
     # D = np.asarray(USE(df["Raw"]),dtype=np.float32)
-    # np.save("use_lyrics_512_27.npy", D)
-    D=np.load("use_lyrics_512_3.npy")
+    np.save("use_lyrics_512_27.npy", D)
+    # D=np.load("use_lyrics_512_3.npy")
 
     from gensim.models import Word2Vec
     import numpy as np
@@ -427,8 +427,8 @@ if __name__ == "__main__":
             for index in np.argwhere(output=="</S>"):
                 output[index[0], index[1]+2:]=""
 
-            for aut, id in {"Radiohead":1,"Disney":0}.items():
-            # for aut, id in {"Rihanna":1,"Eminem":0}.items():
+            # for aut, id in {"Radiohead":1,"Disney":0}.items():
+            for aut, id in {"Rihanna":28,"Eminem":12}.items():
                 with open(f"results/{name}_songs.txt", "a") as song:
                     song.write(f"[{epoch}/{epochs}]  {aut} singing the Beatles : \n")
                     # song.write(' '.join(output[id]).replace("newline", "\n"))
