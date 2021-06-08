@@ -249,7 +249,7 @@ if __name__ == "__main__":
                         help='Type of regularization (either USE, w2vec or None)')
     args = parser.parse_args()
 
-    all_files = os.listdir("../../datasets/lyrics/")   # imagine you're one directory above test dir
+    all_files = os.listdir("../../datasets/lyrics47/")   # imagine you're one directory above test dir
     # all_files = ["radiohead.txt","disney.txt", "adele.txt"]
     n_vers = 8
     data = []
@@ -291,8 +291,7 @@ if __name__ == "__main__":
     # USE = hub.load(module_url)
     # print ("module %s loaded" % module_url)
     # D = np.asarray(USE(df["Raw"]),dtype=np.float32)
-    # np.save("use_lyrics_512_27.npy", D)
-    D=np.load("use_lyrics_512_27.npy")
+    D=np.load("use_lyrics_512_47.npy")
 
     from gensim.models import Word2Vec
     import numpy as np
@@ -433,7 +432,7 @@ if __name__ == "__main__":
                 output[index[0], index[1]+2:]=""
 
             # for aut, id in {"Radiohead":1,"Disney":0}.items():
-            for aut, id in {"Adele":0,"Alicia Keys":1}.items():
+            for aut, id in {"Adele":0,"Al Green":1}.items():
                 with open(f"results/{name}_songs.txt", "a") as song:
                     song.write(f"[{epoch}/{epochs}]  {aut} singing the Beatles : \n")
                     # song.write(' '.join(output[id]).replace("newline", "\n"))
