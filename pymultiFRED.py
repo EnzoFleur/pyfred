@@ -257,7 +257,7 @@ if __name__ == "__main__":
     for file in all_files:
         author = file.split(".")[0]
         authors.append(author)
-        with open('../../datasets/lyrics/'+file, 'r',encoding="utf-8") as fp:
+        with open('../../datasets/lyrics47/'+file, 'r',encoding="utf-8") as fp:
             line = fp.readline()
             sentence = []   
             sentence.append(line.replace("\n"," newLine"))
