@@ -14,6 +14,8 @@ from torch import nn
 import torch.nn.functional as F
 import torch.optim as optim
 
+import json
+
 import idr_torch 
 
 import torch.distributed as dist
@@ -351,6 +353,9 @@ if __name__ == "__main__":
     torch.cuda.set_device(idr_torch.local_rank)
     gpu = torch.device("cuda")
     model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=args.L2loss).to(gpu)
+    
+    json.dump(i2w, open(f"results/i2w_{name}.json", "w"))
+
     ddp_model = DDP(model, device_ids=[idr_torch.local_rank])
 
     criterion = nn.NLLLoss(ignore_index = 0)

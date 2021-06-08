@@ -345,7 +345,7 @@ if __name__ == "__main__":
 
         for batch, [a_test, vec_test, x_test] in enumerate(generate_data):
 
-            output=model.translate(a_test, x_test, vec_test, trg_len=50)
+            output=model.translate(a_test, x_test, vec_test, trg_len=100)
 
             for aut, id in aut2id.items():
                 print(f"{aut} singing the Beatles : ")
