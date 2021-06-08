@@ -428,7 +428,7 @@ if __name__ == "__main__":
                 output[index[0], index[1]+2:]=""
 
             # for aut, id in {"Radiohead":1,"Disney":0}.items():
-            for aut, id in {"Rihanna":28,"Eminem":12}.items():
+            for aut, id in {"Adele":0,"Alicia Keys":1}.items():
                 with open(f"results/{name}_songs.txt", "a") as song:
                     song.write(f"[{epoch}/{epochs}]  {aut} singing the Beatles : \n")
                     # song.write(' '.join(output[id]).replace("newline", "\n"))
