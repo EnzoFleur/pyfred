@@ -431,7 +431,8 @@ if __name__ == "__main__":
             # for aut, id in {"Rihanna":1,"Eminem":0}.items():
                 with open(f"results/{name}_songs.txt", "w") as song:
                     song.write(f"[{epoch}/{epochs}]  {aut} singing the Beatles : \n")
-                    song.write(' '.join(output[id]).replace("newline", "\n"), '\n')
+                    song.write(' '.join(output[id]).replace("newline", "\n"))
+                    song.write("\n")
 
     if idr_torch.rank == 0:
         print(' -- Trained in ' + str(datetime.now()-start) + ' -- ')
