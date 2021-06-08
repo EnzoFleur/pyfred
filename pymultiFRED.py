@@ -123,12 +123,6 @@ class pyfred(nn.Module):
                 
                 outputs[:,t] = input 
 
-        outputs=outputs.numpy()
-        outputs=np.vectorize(self.i2w.get)(outputs)
-
-        for index in np.argwhere(output=="</S>"):
-            output[index[0], index[1]+1:]=""
-
         return outputs
 
 def train_gpus(model, train_data, optimizer, criterion, regularization, alba = None):
@@ -428,6 +422,12 @@ if __name__ == "__main__":
             x_topic,a,x = torch.split(x,[512,1,1],dim=1)
 
             output=model.translate(a, x, x_topic, trg_len=50)
+
+            outputs=outputs.cpu().numpy()
+            outputs=np.vectorize(i2w.get)(outputs)
+
+            for index in np.argwhere(output=="</S>"):
+                output[index[0], index[1]+1:]=""
 
             for aut, id in {"Radiohead":1,"Disney":0}.items():
             # for aut, id in {"Rihanna":1,"Eminem":0}.items():
