@@ -425,13 +425,14 @@ if __name__ == "__main__":
             output=np.vectorize(i2w.get)(output)
 
             for index in np.argwhere(output=="</S>"):
-                output[index[0], index[1]+1:]=""
+                output[index[0], index[1]+2:]=""
 
             for aut, id in {"Radiohead":1,"Disney":0}.items():
             # for aut, id in {"Rihanna":1,"Eminem":0}.items():
-                with open(f"results/{name}_songs.txt", "w") as song:
+                with open(f"results/{name}_songs.txt", "a") as song:
                     song.write(f"[{epoch}/{epochs}]  {aut} singing the Beatles : \n")
-                    song.write(' '.join(output[id]).replace("newline", "\n"))
+                    # song.write(' '.join(output[id]).replace("newline", "\n"))
+                    song.write(' '.join(output[id]))
                     song.write("\n")
 
     if idr_torch.rank == 0:
