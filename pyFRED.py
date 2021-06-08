@@ -147,7 +147,7 @@ if __name__ == "__main__":
 
     os.chdir('c:\\Users\\EnzoT\\Documents\\code\\pyfred')
 
-    all_files = [os.path.join("..\\LyricsGeneration\\lyrics", file) for file in os.listdir("..\\LyricsGeneration\\lyrics")]  # imagine you're one directory above test dir
+    all_files = [os.path.join("..\\LyricsGeneration\\lyricsFull", file) for file in os.listdir("..\\LyricsGeneration\\lyricsFull")]  # imagine you're one directory above test dir
     test_files = [os.path.join("..\\LyricsGeneration\\lyricsFull", file) for file in ["johnny-cash.txt"]]
     all_files = [*all_files, *test_files]
     # all_files = ["radiohead.txt","disney.txt", "adele.txt"]
@@ -236,7 +236,7 @@ if __name__ == "__main__":
 
     model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=L2loss)
 
-    checkpoint = torch.load(f'training_checkpoints\\{name}.pt', map_location=torch.device("cpu"))
+    checkpoint = torch.load(f'training_checkpoints\\{name}_best.pt', map_location=torch.device("cpu"))
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
 
@@ -266,6 +266,8 @@ if __name__ == "__main__":
 
     batch_size=na
     vec_test=torch.tensor(USE(test_df["Raw"]).numpy())
+    vec_test=torch.tensor(USE(["All you need is love, love. Love is all you need."]).numpy())
+
     a_test=torch.tensor([i for i in range(na)]).repeat(vec_test.shape[0]).unsqueeze(1)
     x_test=torch.tensor([word_map["<S>"] for i in range(na)]).repeat(vec_test.shape[0]).unsqueeze(1)
     vec_test=vec_test.repeat_interleave(na, dim=0)
@@ -278,6 +280,9 @@ if __name__ == "__main__":
         output=model.translate(a_test, x_test, vec_test, trg_len=trg_len, generate=True)
         
         for aut, id in aut2id.items():
+            print(f"Artist {aut}")
+            print(' '.join(output[id]))
+            print("\n")
             with open(os.path.join("new_songs", f"{name}_{aut}.txt"), "a+") as file:
                 file.write(' '.join(output[id]).replace("newline", "\n"))
                 file.write("\n")
