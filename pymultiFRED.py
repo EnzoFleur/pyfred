@@ -289,8 +289,8 @@ if __name__ == "__main__":
     # USE = hub.load(module_url)
     # print ("module %s loaded" % module_url)
     # D = np.asarray(USE(df["Raw"]),dtype=np.float32)
-    np.save("use_lyrics_512_27.npy", D)
-    # D=np.load("use_lyrics_512_3.npy")
+    # np.save("use_lyrics_512_27.npy", D)
+    D=np.load("use_lyrics_512_27.npy")
 
     from gensim.models import Word2Vec
     import numpy as np
