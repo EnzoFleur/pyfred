@@ -429,7 +429,7 @@ if __name__ == "__main__":
 
             for aut, id in {"Radiohead":1,"Disney":0}.items():
             # for aut, id in {"Rihanna":1,"Eminem":0}.items():
-                with open(f"results/{name}_songs.txt") as song:
+                with open(f"results/{name}_songs.txt", "w") as song:
                     song.write(f"[{epoch}/{epochs}]  {aut} singing the Beatles : \n")
                     song.write(' '.join(output[id]).replace("newline", "\n"), '\n')
 
