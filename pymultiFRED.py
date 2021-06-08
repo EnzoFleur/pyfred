@@ -421,10 +421,8 @@ if __name__ == "__main__":
 
             x_topic,a,x = torch.split(x,[512,1,1],dim=1)
 
-            output=model.translate(a, x, x_topic, trg_len=50)
-
-            outputs=outputs.cpu().numpy()
-            outputs=np.vectorize(i2w.get)(outputs)
+            output=model.translate(a, x, x_topic, trg_len=50).cpu().numpy()
+            output=np.vectorize(i2w.get)(output)
 
             for index in np.argwhere(output=="</S>"):
                 output[index[0], index[1]+1:]=""
