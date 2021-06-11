@@ -10,6 +10,8 @@ training_checkpoints/*
 
 # Distribution / packaging
 .Python
+results/
+slurm/
 build/
 develop-eggs/
 dist/
