@@ -9,6 +9,7 @@ import random
 from tqdm import tqdm
 import datetime
 import argparse
+import json
 
 import torch
 from torch import nn
@@ -34,7 +35,7 @@ class pyfred(nn.Module):
 
         self.L2loss=L2loss
 
-        self.i2w = i2w
+        self.i2w = i2w            
 
         self.W = nn.Embedding.from_pretrained(torch.from_numpy(W))
 
@@ -173,10 +174,10 @@ if __name__ == "__main__":
                 sent = " ".join(sentence)
                 tok = ['<S>'] + [token.text.strip() for token in tokenizer(sent.lower()) if token.text.strip() != ''] + ['</S>']
                 data.append((author,sent,tok))
-                
+
     df = pd.DataFrame(data, columns =['Author', 'Raw', 'Tokens']) 
-    test_df = df[df.Author == "johnny-cash"]
-    df = df[df.Author != "johnny-cash"]
+    # test_df = df[df.Author == "johnny-cash"]
+    # df = df[df.Author != "johnny-cash"]
     authors=df.Author.unique()
     aut2id = dict(zip(authors,range(len(authors))))
     df.head()
@@ -188,18 +189,19 @@ if __name__ == "__main__":
 
     # ### Training Word2Vec and USE
 
-    print("USE encoding")
-    import tensorflow_hub as hub
-    module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
-    USE = hub.load(module_url)
-    print ("module %s loaded" % module_url)
+    # print("USE encoding")
+    # import tensorflow_hub as hub
+    # module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
+    # USE = hub.load(module_url)
+    # print ("module %s loaded" % module_url)
     # D = np.asarray(USE(df["Raw"]),dtype=np.float32)
+    # np.save("use_nyt_512.npy", D)
     D=np.load("use_lyrics_512_27.npy")
 
     from gensim.models import Word2Vec
     import numpy as np
 
-    EMBEDDING_SIZE = 120
+    EMBEDDING_SIZE = 300
     w2v = Word2Vec(list(df['Tokens']), size=EMBEDDING_SIZE, window=10, min_count=1, negative=10, workers=10)
     word_map = {}
     word_map["<PAD>"] = 0
@@ -234,23 +236,31 @@ if __name__ == "__main__":
     from sklearn.model_selection import train_test_split
     from torch.utils.data import TensorDataset, DataLoader
 
+    test=True
+    if test:
+        i2w = json.load(open(f"results\\i2w_{name}.json"))
+        i2w = {int(k):v for k,v in i2w.items()}
+        word_vectors = np.zeros((len(i2w),EMBEDDING_SIZE))
+        word_map = {v:k for k,v in i2w.items()}
+
     model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=L2loss)
 
     checkpoint = torch.load(f'training_checkpoints\\{name}_best.pt', map_location=torch.device("cpu"))
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
 
-    with torch.no_grad():
-        if L2loss=='USE':
-            doc_embds = model.reducer(torch.tensor(D)).numpy()
-        elif L2loss=='w2vec':
-            doc_embds = model.W(torch.tensor(ang_tok))
-            mask = (doc_embds!=0)
-            doc_embds = doc_embds.sum(1)/mask.sum(1).numpy()
-
     aut_embds = np.load(f"results\\A_{name}.npy")
 
-    _, X_test, _, Y_test = train_test_split(doc_embds, authors_id[:,0], test_size=0.3, random_state=13)
+    with torch.no_grad():
+        if L2loss=='USE':
+            _, X_test, _, Y_test = train_test_split(D, authors_id[:,0], test_size=0.3, random_state=13)
+            X_test = model.reducer(torch.tensor(D)).numpy()
+        elif L2loss=='w2vec':
+            _, X_test, _, Y_test = train_test_split(ang_tok, authors_id[:,0], test_size=0.3, random_state=13)
+            X_test = model.W(torch.tensor(X_test))
+            mask = (X_test!=0)
+            X_test = X_test.sum(1)/mask.sum(1).numpy()
+
     Y_test_proba=np.zeros((len(Y_test),na))
     Y_test_proba[[i for i in range(len(Y_test))],Y_test]=1
 
@@ -287,9 +297,13 @@ if __name__ == "__main__":
                 file.write(' '.join(output[id]).replace("newline", "\n"))
                 file.write("\n")
 
-    # vec=torch.tensor(USE(["All you need is love, love. Love is all you need."]).numpy())
-    # a=torch.tensor([i for i in range(na)]).view(29,1)
-    # input=torch.tensor([word_map["<S>"], word_map["love"]]*na).view(na, -1)
-    # vec=torch.tile(vec, (na, 1))
+    vec=torch.tensor(USE(["All you need is love, love. Love is all you need."]).numpy())
+    a=torch.tensor([i for i in range(na)]).view(na,1)
+    input=torch.tensor([word_map["<S>"], word_map["love"]]*na).view(na, -1)
+    vec=torch.tile(vec, (na, 1))
 
-    # model.translate(a, input, vec, trg_len=30, complete=1)
+    output=model.translate(a, input, vec, trg_len=50, complete=1)
+    for aut, id in aut2id.items():
+        print(f"Artist {aut}")
+        print(' '.join(output[id]))
+        print("\n")

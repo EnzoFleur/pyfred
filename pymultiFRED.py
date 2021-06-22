@@ -237,6 +237,8 @@ if __name__ == "__main__":
 
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('-d', '--datadir', default="lyrics", type=str,
+                        help='dataset to use')
     parser.add_argument('-b', '--batch-size', default=32, type =int,
                         help='batch size. it will be divided in mini-batch for each worker')
     parser.add_argument('-e','--epochs', default=10, type=int, metavar='N',
@@ -249,31 +251,51 @@ if __name__ == "__main__":
                         help='Type of regularization (either USE, w2vec or None)')
     args = parser.parse_args()
 
-    all_files = os.listdir("../../datasets/lyrics47/")   # imagine you're one directory above test dir
-    # all_files = ["radiohead.txt","disney.txt", "adele.txt"]
-    n_vers = 8
-    data = []
-    authors = []
-    for file in all_files:
-        author = file.split(".")[0]
-        authors.append(author)
-        with open('../../datasets/lyrics47/'+file, 'r',encoding="utf-8") as fp:
-            line = fp.readline()
-            sentence = []   
-            sentence.append(line.replace("\n"," newLine"))
-            while line:
+
+    data_dir=args.datadir
+
+    if data_dir=="lyrics":
+        all_files = os.listdir("../../datasets/lyrics47/")   # imagine you're one directory above test dir
+        # all_files = ["radiohead.txt","disney.txt", "adele.txt"]
+        n_vers = 8
+        data = []
+        authors = []
+        for file in all_files:
+            author = file.split(".")[0]
+            authors.append(author)
+            with open('../../datasets/lyrics47/'+file, 'r',encoding="utf-8") as fp:
                 line = fp.readline()
+                sentence = []   
                 sentence.append(line.replace("\n"," newLine"))
-                if len(sentence) == n_vers:
+                while line:
+                    line = fp.readline()
+                    sentence.append(line.replace("\n"," newLine"))
+                    if len(sentence) == n_vers:
+                        sent = " ".join(sentence)
+                        tok = ['<S>'] + [token.text.strip() for token in tokenizer(sent.lower()) if token.text.strip() != ''] + ['</S>']
+                        data.append((author,sent,tok))
+                        sentence = []  
+                if len(sentence) != 0:
                     sent = " ".join(sentence)
                     tok = ['<S>'] + [token.text.strip() for token in tokenizer(sent.lower()) if token.text.strip() != ''] + ['</S>']
                     data.append((author,sent,tok))
-                    sentence = []  
-            if len(sentence) != 0:
-                sent = " ".join(sentence)
-                tok = ['<S>'] + [token.text.strip() for token in tokenizer(sent.lower()) if token.text.strip() != ''] + ['</S>']
-                data.append((author,sent,tok))
-                
+                    
+        D=np.load("use_lyrics_512_47.npy")
+    else:
+        data_dir=f"../../datasets/{data_dir}"
+        data = []
+        authors = [author for author in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir,author))]
+        for author in authors:
+            books=os.listdir(os.path.join(data_dir, author))
+            for book in books:
+                with open(os.path.join(data_dir, author,book), 'r', encoding="utf-8") as fp:
+                    sentence = fp.readline().replace("&#8216;", "'").replace("&#8217;", "'")
+                    if len(sentence) !=0:
+                        tok = ["<S>"] + [token.text.strip() for token in tokenizer(sentence.lower()) if token.text.strip() != ''] + ["<\S>"]
+                data.append((author,sentence, tok))
+
+        D=np.load(f"use_{data_dir}_512.npy")
+
     df = pd.DataFrame(data, columns =['Author', 'Raw', 'Tokens']) 
     aut2id = dict(zip(authors,range(len(authors))))
     df.head()
@@ -291,7 +313,6 @@ if __name__ == "__main__":
     # USE = hub.load(module_url)
     # print ("module %s loaded" % module_url)
     # D = np.asarray(USE(df["Raw"]),dtype=np.float32)
-    D=np.load("use_lyrics_512_47.npy")
 
     from gensim.models import Word2Vec
     import numpy as np
