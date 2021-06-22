@@ -282,6 +282,7 @@ if __name__ == "__main__":
                     
         D=np.load("use_lyrics_512_47.npy")
     else:
+        D=np.load(f"use_{data_dir}_512.npy")
         data_dir=f"../../datasets/{data_dir}"
         data = []
         authors = [author for author in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir,author))]
@@ -294,7 +295,6 @@ if __name__ == "__main__":
                         tok = ["<S>"] + [token.text.strip() for token in tokenizer(sentence.lower()) if token.text.strip() != ''] + ["<\S>"]
                 data.append((author,sentence, tok))
 
-        D=np.load(f"use_{data_dir}_512.npy")
 
     df = pd.DataFrame(data, columns =['Author', 'Raw', 'Tokens']) 
     aut2id = dict(zip(authors,range(len(authors))))
