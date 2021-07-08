@@ -1,0 +1,471 @@
+#!/usr/bin/env python
+# coding: utf-8                      
+import os
+from spacy.lang.en import English
+import pandas as pd
+import numpy as np
+import random
+from datetime import datetime
+from time import time
+import argparse
+
+import torch
+from torch import nn
+import torch.nn.functional as F
+import torch.optim as optim
+
+import json
+
+import idr_torch 
+
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+
+class pyfred(nn.Module):
+
+    def __init__(self, na, W, i2w, pl, nhid=512, L2loss=False):
+        super(pyfred, self).__init__()
+
+        self.nw = W.shape[0]
+        self.r = W.shape[1]
+        self.na = na
+        self.pl = pl
+
+        self.L2loss=L2loss
+
+        self.i2w = i2w
+
+        self.W = nn.Embedding.from_pretrained(torch.from_numpy(W))
+
+        self.A = nn.Embedding(self.na, self.r)
+        # self.decoder = nn.LSTM(2*self.r, nhid, bidirectional=False, batch_first=True)
+        self.decoder = nn.GRU(2*self.r, nhid, bidirectional=False, batch_first=True)
+
+        self.drop = nn.Dropout(0.2)
+
+        self.mapper = nn.Linear(nhid, self.nw)
+
+        self.reducer = nn.Linear(nhid, self.r)
+
+    def single_step(self, a, x, hidden):
+
+        x = x.unsqueeze(1)
+
+        a_embds = self.drop(self.A(a.long()))
+        w_embds = self.drop(self.W(x.long()))
+
+        x = torch.cat((a_embds, w_embds), 2)
+
+        # out, (hid, _) = self.decoder(x.float(), (hidden.unsqueeze(0), torch.randn(hidden.shape).unsqueeze(0).cuda()))
+        out, hid = self.decoder(x.float(), hidden.unsqueeze(0))
+
+        dec = self.mapper(out.squeeze(1))
+
+        return F.log_softmax(dec, dim=-1), hid.squeeze(0)
+
+    def regularization(self, a, x, x_topic):
+
+        if self.L2loss=='USE':
+            w_embds = self.reducer(x_topic)
+        elif self.L2loss=='w2vec':
+            mask = (x!=0)
+
+            w_embds = self.W(x.long()).sum(1)/mask.sum(1).view(-1,1)
+        
+        a_embds = self.A(a.long()).squeeze(1)
+
+        return (w_embds - a_embds).float()
+
+
+    def forward(self, a, src, trg, hidden, teacher_forcing_ratio = 1):
+
+        batch_size = a.shape[0]
+        trg_len = trg.shape[1]
+        
+        outputs = torch.zeros(batch_size, trg_len, self.nw).cuda()
+
+        hidden = torch.zeros(hidden.shape).cuda()
+
+        input = src[:,0]
+
+        for t in range(0, trg_len):
+
+            output, hidden = self.single_step(a, input, hidden.contiguous())
+
+            outputs[:,t] = output
+
+            teacher_force = random.random() < teacher_forcing_ratio
+
+            top1 = output.argmax(1)
+
+            input = trg[:,t] if teacher_force else top1
+
+        return outputs
+
+    def translate(self, a, src, hidden, trg_len=100, generate=False, complete=0):
+
+        with torch.no_grad():
+            batch_size = a.shape[0]
+
+            outputs = torch.zeros((batch_size, trg_len)).cuda()
+            input = src[:,0]
+
+            if generate:
+                hidden=torch.randn(batch_size, 512)
+
+            for t in range(0,trg_len):
+
+                output, hidden = self.single_step(a, input, hidden.contiguous())
+
+                if t<complete:
+                    input=src[:,t+1]
+                else:
+                    output = torch.exp(output)
+                    val, argval = torch.topk(output, 5, axis=1)
+                    val = F.normalize(val,p=1, dim=1)
+                    input=argval[[i for i in range(batch_size)],torch.multinomial(val, 1)[:,0]]
+                
+                outputs[:,t] = input 
+
+        return outputs
+
+def train_gpus(model, train_data, optimizer, criterion, regularization, alba = None):
+
+    model.train()
+
+    train_loss = 0
+    train_accuracy = 0
+    total_step = len(train_data)
+    
+    for i, (x, y) in enumerate(train_data, start=1):
+        if idr_torch.rank==0: start_dataload = time()
+
+        x = x.to(gpu, non_blocking=True)
+        y = y.to(gpu, non_blocking=True)
+
+        if idr_torch.rank==0: stop_dataload = time()
+
+        if idr_torch.rank==0: start_training = time()
+
+        a,x_topic,x = torch.split(x,[1,512,ang_pl],dim=1)
+
+        output = model(a, x, y, x_topic)
+
+        output = output.view(-1, nw)
+
+        y = y.long().view(-1)
+
+        loss = criterion(output, y)
+
+        if model.L2loss:
+            loss += alba*regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r).cuda())
+
+        train_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
+
+        optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+        optimizer.step()
+
+        train_loss += loss.item()
+
+        if idr_torch.rank==0: stop_training = time()
+        if ((i==total_step) | (i==total_step//2)) and (idr_torch.rank == 0):
+            print('\tStep [{}/{}], Loss: {:.4f}, Accuracy: {:.4f}, Time data load: {:.3f}s, Time training: {:.3f}s'.format(
+                                                                    i, total_step, train_loss/i, train_accuracy/i,
+                                                                    (stop_dataload - start_dataload), (stop_training - start_training)))
+
+    return train_loss/total_step, train_accuracy/total_step
+
+def evaluate_gpus(model, test_data, criterion, regularization, alba=None):
+    model.eval()
+
+    test_loss = 0
+    test_norm = 0
+    test_accuracy = 0
+
+    with torch.no_grad():
+
+        for x, y in test_data:
+
+            x = x.to(gpu, non_blocking=True)
+            y = y.to(gpu, non_blocking=True)
+
+            a,x_topic,x = torch.split(x,[1,512,ang_pl],dim=1)
+
+            output = model(a, x, y, x_topic)
+
+            output = output.view(-1, nw)
+
+            y = y.long().view(-1)
+
+            loss = criterion(output, y)
+
+            if model.L2loss:
+                test_norm += alba*regularization(model.regularization(a,x, x_topic), torch.zeros(a.shape[0], model.r).cuda())
+                test_loss += loss.item() + test_norm.item()
+            else:
+                test_loss += loss.item()
+                test_norm =0
+
+            test_accuracy += (output.argmax(1)[y!=0] == y[y!=0]).float().mean()
+
+    
+    if idr_torch.rank ==0:
+        print('\t Evaluation, Test Loss: {:.4f}, Test Accuracy: {:.4f}, Test Norm: {:.4f}'.format(
+                                        test_loss/len(test_data), test_accuracy/len(test_data),test_norm/len(test_data)))
+
+    return test_loss/len(test_data), test_accuracy/len(test_data), test_norm/len(test_data)
+
+
+if __name__ == "__main__":
+
+    # get distributed configuration from Slurm environment
+    NODE_ID = os.environ['SLURM_NODEID']
+    MASTER_ADDR = os.environ['MASTER_ADDR']
+
+    dist.init_process_group(backend='nccl', 
+                        init_method='env://', 
+                        world_size=idr_torch.size, 
+                        rank=idr_torch.rank)
+
+    nlp = English()
+    tokenizer = nlp.tokenizer
+
+    # display info
+    if idr_torch.rank == 0:
+        print(">>> Training on ", len(idr_torch.hostnames), " nodes and ", idr_torch.size, " processes, master node is ", MASTER_ADDR)
+    print("- Process {} corresponds to GPU {} of node {}".format(idr_torch.rank, idr_torch.local_rank, NODE_ID))
+
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-d', '--datadir', default="lyrics", type=str,
+                        help='dataset to use')
+    parser.add_argument('-b', '--batch-size', default=32, type =int,
+                        help='batch size. it will be divided in mini-batch for each worker')
+    parser.add_argument('-e','--epochs', default=10, type=int, metavar='N',
+                        help='number of total epochs to run')
+    parser.add_argument('-n','--name', default="pyfred_multi", type=str,
+                        help='unique run id')
+    parser.add_argument('-a','--alba', default=None, type=float,
+                        help='Regularization coefficient')
+    parser.add_argument('-l','--L2loss', default=False, type=str,
+                        help='Type of regularization (either USE, w2vec or None)')
+    args = parser.parse_args()
+
+
+    data_dir=args.datadir
+
+    if data_dir=="lyrics":
+        all_files = os.listdir("../../datasets/lyrics47/")   # imagine you're one directory above test dir
+        # all_files = ["radiohead.txt","disney.txt", "adele.txt"]
+        n_vers = 8
+        data = []
+        authors = []
+        for file in all_files:
+            author = file.split(".")[0]
+            authors.append(author)
+            with open('../../datasets/lyrics47/'+file, 'r',encoding="utf-8") as fp:
+                line = fp.readline()
+                sentence = []   
+                sentence.append(line.replace("\n"," newLine"))
+                while line:
+                    line = fp.readline()
+                    sentence.append(line.replace("\n"," newLine"))
+                    if len(sentence) == n_vers:
+                        sent = " ".join(sentence)
+                        tok = ['<S>'] + [token.text.strip() for token in tokenizer(sent.lower()) if token.text.strip() != ''] + ['</S>']
+                        data.append((author,sent,tok))
+                        sentence = []  
+                if len(sentence) != 0:
+                    sent = " ".join(sentence)
+                    tok = ['<S>'] + [token.text.strip() for token in tokenizer(sent.lower()) if token.text.strip() != ''] + ['</S>']
+                    data.append((author,sent,tok))
+                    
+        D=np.load("use_lyrics_512_47.npy")
+    else:
+        D=np.load(f"use_{data_dir}_512.npy")
+        data_dir=f"../../datasets/{data_dir}"
+        data = []
+        authors = [author for author in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir,author))]
+        for author in authors:
+            books=os.listdir(os.path.join(data_dir, author))
+            for book in books:
+                with open(os.path.join(data_dir, author,book), 'r', encoding="utf-8") as fp:
+                    sentence = fp.readline().replace("&#8216;", "'").replace("&#8217;", "'")
+                    if len(sentence) !=0:
+                        tok = ["<S>"] + [token.text.strip() for token in tokenizer(sentence.lower()) if token.text.strip() != ''] + ["<\S>"]
+                data.append((author,sentence, tok))
+
+
+    df = pd.DataFrame(data, columns =['Author', 'Raw', 'Tokens']) 
+    aut2id = dict(zip(authors,range(len(authors))))
+    df.head()
+    
+    from nltk.probability import FreqDist
+    raw_data = list(df['Tokens'])
+    flat_list = [item for sublist in raw_data for item in sublist]
+    freq = FreqDist(flat_list)
+
+    # ### Training Word2Vec and USE
+
+    # print("USE encoding")
+    # import tensorflow_hub as hub
+    # module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
+    # USE = hub.load(module_url)
+    # print ("module %s loaded" % module_url)
+    # D = np.asarray(USE(df["Raw"]),dtype=np.float32)
+
+    from gensim.models import Word2Vec
+    import numpy as np
+
+    EMBEDDING_SIZE = 300
+    w2v = Word2Vec(list(df['Tokens']), size=EMBEDDING_SIZE, window=10, min_count=1, negative=10, workers=10)
+    word_map = {}
+    word_map["<PAD>"] = 0
+    word_vectors = [np.zeros((EMBEDDING_SIZE,))]
+    for i, w in enumerate([w for w in w2v.wv.vocab]):
+        word_map[w] = i+1
+        word_vectors.append(w2v.wv[w])
+    word_vectors = np.vstack(word_vectors)
+    i2w = dict(zip([*word_map.values()],[*word_map]))
+    nw = word_vectors.shape[0]
+    na = len(aut2id)
+    print("%d auteurs et %d mots" % (na,nw))
+
+    def pad(a,shift = False):
+        shape = len(a)
+        max_s = max([len(x) for x in a])
+        token = np.zeros((shape,max_s+1),dtype = int)
+        mask  =  np.zeros((shape,max_s+1),dtype = int)
+        for i,o in enumerate(a):
+            token[i,:len(o)] = o
+            mask[i,:len(o)] = 1
+        if shift:
+            return token[:,:-1],token[:,1:],max_s
+        else:
+            return token[:,:-1],max_s
+            
+    ang_tok,ang_tok_shift,ang_pl = pad([[word_map[w] for w in text] for text in raw_data],shift = True)
+
+    authors_id = np.asarray([aut2id[i] for i in list(df['Author'])])
+    authors_id = np.expand_dims(authors_id, 1)
+
+    batch_size_per_gpu = args.batch_size
+    epochs=args.epochs
+    name=args.name
+
+    batch_size = batch_size_per_gpu * idr_torch.size
+
+    X = np.hstack([authors_id,D,ang_tok])
+    Y = np.hstack([ang_tok_shift])
+
+    X = X.astype(np.float32)
+
+    from sklearn.model_selection import train_test_split
+    from torch.utils.data import TensorDataset, DataLoader
+
+    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, train_size=0.80, random_state=101)
+
+    train_data = TensorDataset(torch.tensor(X_train), torch.tensor(Y_train))
+    test_data = TensorDataset(torch.tensor(X_test), torch.tensor(Y_test))
+
+    if idr_torch.rank==0: print("Dataset is ready to be loaded !")
+
+    torch.cuda.set_device(idr_torch.local_rank)
+    gpu = torch.device("cuda")
+    model = pyfred(na, word_vectors, i2w, ang_pl, L2loss=args.L2loss).to(gpu)
+    
+    json.dump(i2w, open(f"results/i2w_{name}.json", "w"))
+
+    ddp_model = DDP(model, device_ids=[idr_torch.local_rank])
+
+    criterion = nn.NLLLoss(ignore_index = 0)
+
+    if idr_torch.rank==0: print("Model is ready for training !")
+
+    if model.L2loss:
+        alba = args.alba
+        if alba is None:
+            print("Alba is required !")
+            exit()
+        regularization = nn.MSELoss()
+    else:
+        regularization=None
+        alba=None
+
+    optimizer = optim.Adam(ddp_model.parameters(), lr=0.001)
+
+    train_sampler = torch.utils.data.distributed.DistributedSampler(train_data, 
+                                                                    num_replicas=idr_torch.size,
+                                                                    rank=idr_torch.rank)
+
+    train_data = torch.utils.data.DataLoader(dataset=train_data,
+                                                batch_size = batch_size_per_gpu,
+                                                shuffle=False,
+                                                num_workers=0,
+                                                pin_memory=True,
+                                                sampler=train_sampler)
+
+    test_sampler = torch.utils.data.distributed.DistributedSampler(test_data, 
+                                                                    num_replicas=idr_torch.size,
+                                                                    rank=idr_torch.rank)
+
+    test_data = torch.utils.data.DataLoader(dataset=test_data,
+                                                batch_size = batch_size_per_gpu,
+                                                shuffle=False,
+                                                num_workers=0,
+                                                pin_memory=True,
+                                                sampler=test_sampler)
+
+    best_valid_loss = float('inf')
+
+    if idr_torch.rank==0: print(f"Training is beginning for {epochs} epochs !")
+    if idr_torch.rank == 0: start = datetime.now()
+    for epoch in range(1, epochs+1):
+
+        if idr_torch.rank == 0: print(f'Epoch [{epoch}/{epochs}] :')
+
+        train_loss, train_accuracy = train_gpus(model, train_data, optimizer, criterion, regularization, alba)
+        test_loss, test_accuracy, test_norm = evaluate_gpus(model, test_data, criterion, regularization, alba)
+
+        if idr_torch.rank ==0:
+            if (test_loss < best_valid_loss)|(epoch%10==0):
+                suffix='best' if (test_loss < best_valid_loss) else 'last'
+                best_valid_loss = test_loss
+                print(f"---- Saving model checkpoint at epoch {epoch} ----")
+                torch.save({'epoch':epoch,
+                            'model_state_dict':model.state_dict(),
+                            'optimizer_state_dict': optimizer.state_dict()},  f'training_checkpoints/{name}_{suffix}.pt')
+
+            with open(f"results/loss_{name}.txt", "a") as ff:
+                ff.write('%06f | %06f | %06f | %06f | %06f\n' % (train_loss, test_loss, train_accuracy*100, test_accuracy*100, test_norm))
+            
+        if (idr_torch.rank == 0) & (epoch%2==0):
+
+            model.eval()
+            x=torch.tensor(np.load("vec_test.npy"), dtype=torch.float).cuda()
+
+            x_topic,a,x = torch.split(x,[512,1,1],dim=1)
+
+            output=model.translate(a, x, x_topic, trg_len=50).cpu().numpy()
+            output=np.vectorize(i2w.get)(output)
+
+            for index in np.argwhere(output=="</S>"):
+                output[index[0], index[1]+2:]=""
+
+            # for aut, id in {"Radiohead":1,"Disney":0}.items():
+            for aut, id in {"Adele":0,"Al Green":1}.items():
+                with open(f"results/{name}_songs.txt", "a") as song:
+                    song.write(f"[{epoch}/{epochs}]  {aut} singing the Beatles : \n")
+                    # song.write(' '.join(output[id]).replace("newline", "\n"))
+                    song.write(' '.join(output[id]))
+                    song.write("\n")
+
+    if idr_torch.rank == 0:
+        print(' -- Trained in ' + str(datetime.now()-start) + ' -- ')
+        with torch.no_grad():
+            A = np.array(model.A.weight.data.cpu())
+            print(A.shape)
+            
+        np.save(f"results/A_{name}.npy", A)
