@@ -318,7 +318,7 @@ if __name__ == "__main__":
     from gensim.models import Word2Vec
     import numpy as np
 
-    EMBEDDING_SIZE = 300
+    EMBEDDING_SIZE = 150
     w2v = Word2Vec(list(df['Tokens']), size=EMBEDDING_SIZE, window=10, min_count=1, negative=10, workers=10)
     word_map = {}
     word_map["<PAD>"] = 0
