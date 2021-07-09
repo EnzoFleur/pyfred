@@ -257,7 +257,7 @@ if __name__ == "__main__":
     data_dir=args.datadir
 
     if data_dir=="lyrics":
-        all_files = os.listdir("../../datasets/lyrics47/")   # imagine you're one directory above test dir
+        all_files = sorted(os.listdir("../../datasets/lyrics47/"))   # imagine you're one directory above test dir
         # all_files = ["radiohead.txt","disney.txt", "adele.txt"]
         n_vers = 8
         data = []
@@ -287,12 +287,12 @@ if __name__ == "__main__":
         D=np.load(f"use_{data_dir}_512.npy")
         data_dir=f"../../datasets/{data_dir}"
         data = []
-        authors = [author for author in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir,author))]
+        authors = sorted([author for author in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir,author))])
         for author in authors:
-            books=os.listdir(os.path.join(data_dir, author))
+            books=sorted(os.listdir(os.path.join(data_dir, author)))
             for book in books:
                 with open(os.path.join(data_dir, author,book), 'r', encoding="utf-8") as fp:
-                    sentence = fp.readline().replace("&#8216;", "'").replace("&#8217;", "'")
+                    sentence = fp.readline()
                     if len(sentence) !=0:
                         tok = ["<S>"] + [token.text.strip() for token in tokenizer(sentence.lower()) if token.text.strip() != ''] + ["<\S>"]
                 data.append((author,sentence, tok))

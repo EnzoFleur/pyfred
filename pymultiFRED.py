@@ -13,6 +13,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import torch.optim as optim
+from nltk.tokenize import sent_tokenize
 
 import json
 
@@ -255,7 +256,7 @@ if __name__ == "__main__":
     data_dir=args.datadir
 
     if data_dir=="lyrics":
-        all_files = os.listdir("../../datasets/lyrics47/")   # imagine you're one directory above test dir
+        all_files = sorted(os.listdir("../../datasets/lyrics47/"))   # imagine you're one directory above test dir
         # all_files = ["radiohead.txt","disney.txt", "adele.txt"]
         n_vers = 8
         data = []
@@ -274,7 +275,7 @@ if __name__ == "__main__":
                         sent = " ".join(sentence)
                         tok = ['<S>'] + [token.text.strip() for token in tokenizer(sent.lower()) if token.text.strip() != ''] + ['</S>']
                         data.append((author,sent,tok))
-                        sentence = []  
+                        sentence = [] 
                 if len(sentence) != 0:
                     sent = " ".join(sentence)
                     tok = ['<S>'] + [token.text.strip() for token in tokenizer(sent.lower()) if token.text.strip() != ''] + ['</S>']
@@ -285,15 +286,16 @@ if __name__ == "__main__":
         D=np.load(f"use_{data_dir}_512.npy")
         data_dir=f"../../datasets/{data_dir}"
         data = []
-        authors = [author for author in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir,author))]
+        authors = sorted([author for author in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir,author))])
         for author in authors:
-            books=os.listdir(os.path.join(data_dir, author))
+            books=sorted(os.listdir(os.path.join(data_dir, author)))
             for book in books:
                 with open(os.path.join(data_dir, author,book), 'r', encoding="utf-8") as fp:
-                    sentence = fp.readline().replace("&#8216;", "'").replace("&#8217;", "'")
-                    if len(sentence) !=0:
-                        tok = ["<S>"] + [token.text.strip() for token in tokenizer(sentence.lower()) if token.text.strip() != ''] + ["<\S>"]
-                data.append((author,sentence, tok))
+                    sentence = sent_tokenize(fp.readline())[:50]
+                    for sent in sentence:
+                        if len(sent) !=0:
+                            tok = ["<S>"] + [token.text.strip() for token in tokenizer(sent.lower()) if token.text.strip() != ''] + ["<\S>"]
+                        data.append((author,sent, tok))
 
 
     df = pd.DataFrame(data, columns =['Author', 'Raw', 'Tokens']) 
@@ -307,12 +309,14 @@ if __name__ == "__main__":
 
     # ### Training Word2Vec and USE
 
-    # print("USE encoding")
-    # import tensorflow_hub as hub
-    # module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
-    # USE = hub.load(module_url)
-    # print ("module %s loaded" % module_url)
-    # D = np.asarray(USE(df["Raw"]),dtype=np.float32)
+    print("USE encoding")
+    import tensorflow_hub as hub
+    module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
+    USE = hub.load(module_url)
+    print ("module %s loaded" % module_url)
+    D = np.asarray(USE(df["Raw"]),dtype=np.float32)
+
+    
 
     from gensim.models import Word2Vec
     import numpy as np

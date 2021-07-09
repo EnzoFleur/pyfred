@@ -148,7 +148,7 @@ if __name__ == "__main__":
 
     os.chdir('c:\\Users\\EnzoT\\Documents\\code\\pyfred')
 
-    all_files = [os.path.join("..\\LyricsGeneration\\lyricsFull", file) for file in os.listdir("..\\LyricsGeneration\\lyricsFull")]  # imagine you're one directory above test dir
+    all_files = sorted([os.path.join("..\\LyricsGeneration\\lyricsFull", file) for file in os.listdir("..\\LyricsGeneration\\lyricsFull")])  # imagine you're one directory above test dir
     test_files = [os.path.join("..\\LyricsGeneration\\lyricsFull", file) for file in ["johnny-cash.txt"]]
     all_files = [*all_files, *test_files]
     # all_files = ["radiohead.txt","disney.txt", "adele.txt"]
@@ -195,7 +195,7 @@ if __name__ == "__main__":
     # USE = hub.load(module_url)
     # print ("module %s loaded" % module_url)
     # D = np.asarray(USE(df["Raw"]),dtype=np.float32)
-    # np.save("use_nyt_512.npy", D)
+    np.save("use_s2_512.npy", D)
     D=np.load("use_lyrics_512_27.npy")
 
     from gensim.models import Word2Vec
