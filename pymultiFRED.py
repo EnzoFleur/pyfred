@@ -308,15 +308,12 @@ if __name__ == "__main__":
     freq = FreqDist(flat_list)
 
     # ### Training Word2Vec and USE
-
-    print("USE encoding")
-    import tensorflow_hub as hub
-    module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
-    USE = hub.load(module_url)
-    print ("module %s loaded" % module_url)
-    D = np.asarray(USE(df["Raw"]),dtype=np.float32)
-
-    
+    # print("USE encoding")
+    # import tensorflow_hub as hub
+    # module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
+    # USE = hub.load(module_url)
+    # print ("module %s loaded" % module_url)
+    # D = np.asarray(USE(df["Raw"]),dtype=np.float32)
 
     from gensim.models import Word2Vec
     import numpy as np
