@@ -294,7 +294,7 @@ if __name__ == "__main__":
                     sentence = sent_tokenize(fp.readline())[:50]
                     for sent in sentence:
                         if len(sent) !=0:
-                            tok = ["<S>"] + [token.text.strip() for token in tokenizer(sent.lower()) if token.text.strip() != ''] + ["<\S>"]
+                            tok = ["<S>"] + [token.text.strip() for token in tokenizer(sent.lower()) if token.text.strip() != ''][:100] + ["<\S>"]
                         data.append((author,sent, tok))
 
 
@@ -307,18 +307,18 @@ if __name__ == "__main__":
     flat_list = [item for sublist in raw_data for item in sublist]
     freq = FreqDist(flat_list)
 
-    # ### Training Word2Vec and USE
-    # print("USE encoding")
-    # import tensorflow_hub as hub
-    # module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
-    # USE = hub.load(module_url)
-    # print ("module %s loaded" % module_url)
-    # D = np.asarray(USE(df["Raw"]),dtype=np.float32)
+    ### Training Word2Vec and USE
+    print("USE encoding")
+    import tensorflow_hub as hub
+    module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
+    USE = hub.load(module_url)
+    print ("module %s loaded" % module_url)
+    D = np.asarray(USE(df["Raw"]),dtype=np.float32)
 
     from gensim.models import Word2Vec
     import numpy as np
 
-    EMBEDDING_SIZE = 150
+    EMBEDDING_SIZE = 300
     w2v = Word2Vec(list(df['Tokens']), size=EMBEDDING_SIZE, window=10, min_count=1, negative=10, workers=10)
     word_map = {}
     word_map["<PAD>"] = 0

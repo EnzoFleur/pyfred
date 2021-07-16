@@ -148,9 +148,9 @@ if __name__ == "__main__":
 
     os.chdir('c:\\Users\\EnzoT\\Documents\\code\\pyfred')
 
-    all_files = sorted([os.path.join("..\\LyricsGeneration\\lyricsFull", file) for file in os.listdir("..\\LyricsGeneration\\lyricsFull")])  # imagine you're one directory above test dir
-    test_files = [os.path.join("..\\LyricsGeneration\\lyricsFull", file) for file in ["johnny-cash.txt"]]
-    all_files = [*all_files, *test_files]
+    all_files = sorted([os.path.join("..\\..\\datasets\\lyrics47", file) for file in os.listdir("..\\LyricsGeneration\\lyricsFull")])  # imagine you're one directory above test dir
+    # test_files = [os.path.join("..\\LyricsGeneration\\lyrics47", file) for file in ["johnny-cash.txt"]]
+    # all_files = [*all_files, *test_files]
     # all_files = ["radiohead.txt","disney.txt", "adele.txt"]
     n_vers = 8
     data = []
@@ -196,7 +196,7 @@ if __name__ == "__main__":
     # print ("module %s loaded" % module_url)
     # D = np.asarray(USE(df["Raw"]),dtype=np.float32)
     np.save("use_s2_512.npy", D)
-    D=np.load("use_lyrics_512_27.npy")
+    D=np.load("use_lyrics_512_47.npy")
 
     from gensim.models import Word2Vec
     import numpy as np
@@ -250,11 +250,12 @@ if __name__ == "__main__":
     model.eval()
 
     aut_embds = np.load(f"results\\A_{name}.npy")
+    np.save(f"results\\A_{name}_names.npy", np.c_[aut_embds, np.array(sorted(authors))])
 
     with torch.no_grad():
         if L2loss=='USE':
             _, X_test, _, Y_test = train_test_split(D, authors_id[:,0], test_size=0.3, random_state=13)
-            X_test = model.reducer(torch.tensor(D)).numpy()
+            X_test = model.reducer(torch.tensor(X_test)).numpy()
         elif L2loss=='w2vec':
             _, X_test, _, Y_test = train_test_split(ang_tok, authors_id[:,0], test_size=0.3, random_state=13)
             X_test = model.W(torch.tensor(X_test))
@@ -299,10 +300,10 @@ if __name__ == "__main__":
 
     vec=torch.tensor(USE(["All you need is love, love. Love is all you need."]).numpy())
     a=torch.tensor([i for i in range(na)]).view(na,1)
-    input=torch.tensor([word_map["<S>"], word_map["love"]]*na).view(na, -1)
+    input=torch.tensor([word_map["<S>"]]*na).view(na, -1)
     vec=torch.tile(vec, (na, 1))
 
-    output=model.translate(a, input, vec, trg_len=50, complete=1)
+    output=model.translate(a, input, vec, trg_len=50)
     for aut, id in aut2id.items():
         print(f"Artist {aut}")
         print(' '.join(output[id]))
