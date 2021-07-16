@@ -291,7 +291,7 @@ if __name__ == "__main__":
             books=sorted(os.listdir(os.path.join(data_dir, author)))
             for book in books:
                 with open(os.path.join(data_dir, author,book), 'r', encoding="utf-8") as fp:
-                    sentence = sent_tokenize(fp.readline())[:50]
+                    sentence = sent_tokenize(fp.readline())[50:100]
                     for sent in sentence:
                         if len(sent) !=0:
                             tok = ["<S>"] + [token.text.strip() for token in tokenizer(sent.lower()) if token.text.strip() != ''][:100] + ["<\S>"]
